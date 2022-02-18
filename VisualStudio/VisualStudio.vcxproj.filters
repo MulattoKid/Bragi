@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\src\dft.cpp" />
+    <ClCompile Include="..\src\flac.cpp" />
+    <ClCompile Include="..\src\main.cpp" />
+    <ClCompile Include="..\src\playlist.cpp" />
+    <ClCompile Include="..\src\scene_columns.cpp" />
+    <ClCompile Include="..\src\scene_ui.cpp" />
+    <ClCompile Include="..\src\song.cpp" />
+    <ClCompile Include="..\src\sound_player.cpp" />
+    <ClCompile Include="..\src\vulkan_engine.cpp" />
+    <ClCompile Include="..\src\wav.cpp" />
+    <ClCompile Include="..\src\windows_audio.cpp" />
+    <ClCompile Include="..\src\windows_synchronization.cpp" />
+    <ClCompile Include="..\src\windows_thread.cpp" />
+    <ClCompile Include="..\src\windows_window.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\dft.h" />
+    <ClInclude Include="..\src\flac.h" />
+    <ClInclude Include="..\src\macros.h" />
+    <ClInclude Include="..\src\playlist.h" />
+    <ClInclude Include="..\src\scene_columns.h" />
+    <ClInclude Include="..\src\scene_ui.h" />
+    <ClInclude Include="..\src\song.h" />
+    <ClInclude Include="..\src\sound_player.h" />
+    <ClInclude Include="..\src\vulkan_engine.h" />
+    <ClInclude Include="..\src\wav.h" />
+    <ClInclude Include="..\src\windows_audio.h" />
+    <ClInclude Include="..\src\windows_synchronization.h" />
+    <ClInclude Include="..\src\windows_thread.h" />
+    <ClInclude Include="..\src\windows_window.h" />
+  </ItemGroup>
+</Project>

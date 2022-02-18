@@ -1,0 +1,14 @@
+# VSCode
+.vscode
+
+# Data Files
+data/pipeline_cache.bin
+
+# Visual Studio Files
+VisualStudio/.vs
+VisualStudio/x64
+
+# Visual Studio Build Files
+Bragi.exe
+Bragi.ilk
+Bragi.pdb
