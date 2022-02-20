@@ -103,17 +103,21 @@ struct vulkan_context_t
 void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulkan_context);
 void VulkanSetObjectName(VkDevice device, VkObjectType object_type, uint64_t object, const char* name, PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT);
 void VulkanSetObjectName(vulkan_context_t* vulkan, VkObjectType object_type, uint64_t object, const char* name);
-void VulkanCleanUpSwapchain(vulkan_context_t* vulkan);
+// Swapchain
+void VulkanDestroySwapchain(vulkan_context_t* vulkan);
 void VulkanRecreateSwapchain(vulkan_context_t* vulkan);
+// Shaders
 void VulkanCreateShader(vulkan_context_t* vulkan, const char* file, VkShaderModule* shader, const char* shader_name);
+// Buffers
 void VulkanCreateBuffer(vulkan_context_t* vulkan, void* buffer_data, VkDeviceSize buffer_data_size, VkBufferUsageFlags buffer_usage, VkMemoryPropertyFlags buffer_memory_properties, VkBuffer* buffer, VkDeviceMemory* buffer_memory, const char* buffer_name, const char* buffer_memory_name);
 void VulkanDestroyBuffer(vulkan_context_t* vulkan, VkBuffer* buffer, VkDeviceMemory* buffer_memory);
+// Images
 void VulkanCreateImage(vulkan_context_t* vulkan, VkImageType image_type, VkFormat image_format, uint32_t image_width, uint32_t image_height, uint32_t image_depth, VkSampleCountFlagBits image_samples, VkImageTiling image_tiling, VkImageUsageFlags image_usage, VkImageViewType image_view_type, VkImageAspectFlags image_aspect, VkImageLayout image_final_layout, void* image_data, VkDeviceSize image_data_size, VkMemoryPropertyFlags image_memory_properties, VkImage* image, VkDeviceMemory *image_memory, VkImageView* image_view, const char* image_name, const char* image_memory_name, const char* image_view_name);
+void VulkanCmdTransitionImageLayout(vulkan_context_t* vulkan, VkCommandBuffer command_buffer, VkImage image, VkImageLayout image_old_layout, VkImageLayout image_new_layout, VkImageAspectFlags image_aspect, VkPipelineStageFlags barrier_src_pipeline_stage, VkAccessFlags barrier_src_access_mask, VkPipelineStageFlags barrier_dst_pipeline_stage, VkAccessFlags barrier_dst_access_mask, VkDependencyFlags barrier_dependency);
+// Samplers
 void VulkanCreateSampler(vulkan_context_t* vulkan, VkFilter sampler_min_filter, VkFilter sampler_mag_filter, VkSampler* sampler, const char* sampler_name);
-
-// Command recording functions
+// Debug Util Labels
 void VulkanCmdBeginDebugUtilsLabel(vulkan_context_t* vulkan, VkCommandBuffer command_buffer, const char* debug_label_name);
 void VulkanCmdEndDebugUtilsLabel(vulkan_context_t* vulkan, VkCommandBuffer command_buffer);
-void VulkanCmdTransitionImageLayout(vulkan_context_t* vulkan, VkCommandBuffer command_buffer, VkImage image, VkImageLayout image_old_layout, VkImageLayout image_new_layout, VkImageAspectFlags image_aspect, VkPipelineStageFlags barrier_src_pipeline_stage, VkAccessFlags barrier_src_access_mask, VkPipelineStageFlags barrier_dst_pipeline_stage, VkAccessFlags barrier_dst_access_mask, VkDependencyFlags barrier_dependency);
 
 #endif

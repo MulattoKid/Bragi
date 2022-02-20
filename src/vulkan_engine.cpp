@@ -68,9 +68,9 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     VkApplicationInfo app_info;
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pNext = NULL;
-    app_info.pApplicationName = "SoundPlayer";
+    app_info.pApplicationName = "Bragi";
     app_info.applicationVersion = 1;
-    app_info.pEngineName = "SoundPlayerVulkanEngine";
+    app_info.pEngineName = "BragiVulkanEngine";
     app_info.engineVersion = 1;
     app_info.apiVersion = target_api_version;
 
@@ -895,7 +895,7 @@ void VulkanSetObjectName(vulkan_context_t* vulkan, VkObjectType object_type, uin
     VulkanSetObjectName(vulkan->device, object_type, object, name, vulkan->vkSetDebugUtilsObjectNameEXT);
 }
 
-void VulkanCleanUpSwapchain(vulkan_context_t* vulkan)
+void VulkanDestroySwapchain(vulkan_context_t* vulkan)
 {
     // Intermeditae swapchain image
     vkDestroyImageView(vulkan->device, vulkan->intermediate_swapchain_image_view, NULL);

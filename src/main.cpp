@@ -341,7 +341,7 @@ int main(int argc, char** argv)
                             else if (strcmp(command, "taskbar_show") == 0)
                             {
                                 vkDeviceWaitIdle(vulkan.device);
-                                VulkanCleanUpSwapchain(&vulkan);
+                                VulkanDestroySwapchain(&vulkan);
                                 WindowTaskbarShow(window);
                                 VulkanRecreateSwapchain(&vulkan);
                                 SceneColumnsRecreateFramebuffers(&vulkan);
@@ -350,7 +350,7 @@ int main(int argc, char** argv)
                             else if (strcmp(command, "taskbar_hide") == 0)
                             {
                                 vkDeviceWaitIdle(vulkan.device);
-                                VulkanCleanUpSwapchain(&vulkan);
+                                VulkanDestroySwapchain(&vulkan);
                                 WindowTaskbarHide(window);
                                 VulkanRecreateSwapchain(&vulkan);
                                 SceneColumnsRecreateFramebuffers(&vulkan);
