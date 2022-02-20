@@ -519,6 +519,44 @@ static uint64_t FLACLoadMetadataBlockStreaminfo(byte_t* bytes, flac_metadata_blo
     return (bytes - bytes_start); // Always 34
 }
 
+static uint64_t FLACLoadMetadataBlockVorbisComment(byte_t* bytes, song_t* song)
+{
+    byte_t* bytes_start = bytes;
+
+    uint32_t vendor_string_length = *((uint32_t*)bytes);
+    bytes += 4;
+    bytes += vendor_string_length; // Skip vendor string
+    uint32_t comment_field_count = *((uint32_t*)bytes);
+    bytes += 4;
+    for (uint32_t i = 0; i < comment_field_count; i++)
+    {
+        uint32_t comment_length = *((uint32_t*)bytes);
+        bytes += 4;
+        char* comment = (char*)bytes;
+        if (strncmp("TITLE", comment, 5) == 0)
+        {
+            char* title = comment + 6; // +6 to skip "TITLE="
+            strncpy(song->title, title, comment_length - 6);
+            song->title[comment_length - 6] = '\0'; // Null-terminate
+        }
+        else if (strncmp("ALBUM", comment, 5) == 0)
+        {
+            char* album = comment + 6; // +6 to skip "ALBUM="
+            strncpy(song->album, album, comment_length - 6);
+            song->album[comment_length - 6] = '\0'; // Null-terminate
+        }
+        else if (strncmp("ARTIST", comment, 6) == 0)
+        {
+            char* artist = comment + 7; // +7 to skip "ARTIST="
+            strncpy(song->artist, artist, comment_length - 6);
+            song->artist[comment_length - 7] = '\0'; // Null-terminate
+        }
+        bytes += comment_length;
+    }
+
+    return (bytes - bytes_start);
+}
+
 static uint64_t FLACLoadFrameHeader(byte_t* bytes, flac_metadata_block_streaminfo_t* metadata_block_streaminfo, flac_frame_header_t* frame_header)
 {
     byte_t* bytes_start = bytes;
@@ -1270,7 +1308,7 @@ song_error_e FLACLoad(song_t* song)
     byte_t* flac_memory_end = flac_memory + flac_file_size;
 
     // Verify FLAC file
-    if (strncmp((char*)flac_memory, "fLaC", 5) != 0)
+    if (strncmp((char*)flac_memory, "fLaC", 4) != 0)
     {
         free(flac_memory);
         exit(EXIT_FAILURE);
@@ -1293,11 +1331,17 @@ song_error_e FLACLoad(song_t* song)
     //printf("[%u,%u]\n", metadata_block_streaminfo.frame_size_min, metadata_block_streaminfo.frame_size_max);
 
     // Skip all following METADATA blocks
-    flac_metadata_block_header_t metadata_block_header_skip = metadata_block_header;
-    while (metadata_block_header_skip.is_last == false)
+    while (metadata_block_header.is_last == false)
     {
-        flac_memory += FLACPLoadMetadataBlockHeader(flac_memory, &metadata_block_header_skip);
-        flac_memory += metadata_block_header_skip.size;
+        flac_memory += FLACPLoadMetadataBlockHeader(flac_memory, &metadata_block_header);
+        if (metadata_block_header.type == FLAC_METADATA_BLOCK_TYPE_VORBIS_COMMENT)
+        {
+            flac_memory += FLACLoadMetadataBlockVorbisComment(flac_memory, song);
+        }
+        else
+        {
+            flac_memory += metadata_block_header.size;
+        }
     }
     
     // Set up WAV info based on FLAC info
