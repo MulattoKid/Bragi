@@ -44,9 +44,8 @@ static VkPipelineLayout fullscreen_graphics_pipeline_layout;
 // Graphics Pipelines
 static VkPipeline fullscreen_graphics_pipeline;
 
-// Framebuffers
-static uint32_t current_swapchain_image_count;
-static VkFramebuffer* framebuffers;
+// Framebuffer
+static VkFramebuffer framebuffer;
 static float resolution[2];
 
 void SceneColumnsInit(vulkan_context_t* vulkan, VkBuffer* dft_storage_buffers)
@@ -359,73 +358,57 @@ void SceneColumnsInit(vulkan_context_t* vulkan, VkBuffer* dft_storage_buffers)
     VK_CHECK_RES(vkCreateGraphicsPipelines(vulkan->device, vulkan->pipeline_cache, 1, &fullscreen_graphics_pipeline_info, NULL, &fullscreen_graphics_pipeline));
     VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_PIPELINE, (uint64_t)fullscreen_graphics_pipeline, "Fullscreen Graphics Pipeline (Main Render Pass)");
 
-    // Framebuffers
-    current_swapchain_image_count = vulkan->swapchain_image_count;
-    framebuffers = (VkFramebuffer*)malloc(current_swapchain_image_count * sizeof(VkFramebuffer));
-    for (uint32_t i = 0; i < current_swapchain_image_count; i++)
-    {
-        VkImageView attachments[2] = {
-            vulkan->intermediate_swapchain_image_view,
-            vulkan->depth_stencil_image_view
-        };
-
-        VkFramebufferCreateInfo framebuffer_info;
-        framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebuffer_info.pNext = NULL;
-        framebuffer_info.flags = 0;
-        framebuffer_info.renderPass = render_pass;
-        framebuffer_info.attachmentCount = 2;
-        framebuffer_info.pAttachments = attachments;
-        framebuffer_info.width = vulkan->surface_caps.currentExtent.width;
-        framebuffer_info.height = vulkan->surface_caps.currentExtent.height;
-        framebuffer_info.layers = 1;
-        VK_CHECK_RES(vkCreateFramebuffer(vulkan->device, &framebuffer_info, NULL, &framebuffers[i]));
-        
-        memset(vulkan->vulkan_object_name, 0, 128);
-        sprintf(vulkan->vulkan_object_name, "SceneColumns: Main Framebuffer ");
-        sprintf(vulkan->vulkan_object_name + 18, "%u", i);
-        VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)framebuffers[i], vulkan->vulkan_object_name);
-    }
+    // Framebuffer
+    VkImageView attachments[2] = {
+        vulkan->intermediate_swapchain_image_view,
+        vulkan->depth_stencil_image_view
+    };
+    VkFramebufferCreateInfo framebuffer_info;
+    framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebuffer_info.pNext = NULL;
+    framebuffer_info.flags = 0;
+    framebuffer_info.renderPass = render_pass;
+    framebuffer_info.attachmentCount = 2;
+    framebuffer_info.pAttachments = attachments;
+    framebuffer_info.width = vulkan->surface_caps.currentExtent.width;
+    framebuffer_info.height = vulkan->surface_caps.currentExtent.height;
+    framebuffer_info.layers = 1;
+    VK_CHECK_RES(vkCreateFramebuffer(vulkan->device, &framebuffer_info, NULL, &framebuffer));
+    
+    memset(vulkan->vulkan_object_name, 0, 128);
+    sprintf(vulkan->vulkan_object_name, "SceneColumns: Main Framebuffer");
+    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)framebuffer, vulkan->vulkan_object_name);
+    
     resolution[0] = (float)vulkan->surface_caps.currentExtent.width;
     resolution[1] = (float)vulkan->surface_caps.currentExtent.height;
 }
 
 void SceneColumnsRecreateFramebuffers(vulkan_context_t* vulkan)
 {
-    // Delete old
-    for (uint32_t i = 0; i < current_swapchain_image_count; i++)
-    {
-        vkDestroyFramebuffer(vulkan->device, framebuffers[i], NULL);
-    }
-    free(framebuffers);
+    // Delete old framebuffer
+    vkDestroyFramebuffer(vulkan->device, framebuffer, NULL);
 
-    // Create new
-    current_swapchain_image_count = vulkan->swapchain_image_count;
-    framebuffers = (VkFramebuffer*)malloc(vulkan->swapchain_image_count * sizeof(VkFramebuffer));
-    for (uint32_t i = 0; i < vulkan->swapchain_image_count; i++)
-    {
-        VkImageView attachments[2] = {
-            vulkan->intermediate_swapchain_image_view,
-            vulkan->depth_stencil_image_view
-        };
-
-        VkFramebufferCreateInfo framebuffer_info;
-        framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebuffer_info.pNext = NULL;
-        framebuffer_info.flags = 0;
-        framebuffer_info.renderPass = render_pass;
-        framebuffer_info.attachmentCount = 2;
-        framebuffer_info.pAttachments = attachments;
-        framebuffer_info.width = vulkan->surface_caps.currentExtent.width;
-        framebuffer_info.height = vulkan->surface_caps.currentExtent.height;
-        framebuffer_info.layers = 1;
-        VK_CHECK_RES(vkCreateFramebuffer(vulkan->device, &framebuffer_info, NULL, &framebuffers[i]));
-        
-        memset(vulkan->vulkan_object_name, 0, 128);
-        sprintf(vulkan->vulkan_object_name, "SceneColumns: Main Framebuffer ");
-        sprintf(vulkan->vulkan_object_name + 18, "%u", i);
-        VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)framebuffers[i], vulkan->vulkan_object_name);
-    }
+    // Create new framebuffer
+    VkImageView attachments[2] = {
+        vulkan->intermediate_swapchain_image_view,
+        vulkan->depth_stencil_image_view
+    };
+    VkFramebufferCreateInfo framebuffer_info;
+    framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebuffer_info.pNext = NULL;
+    framebuffer_info.flags = 0;
+    framebuffer_info.renderPass = render_pass;
+    framebuffer_info.attachmentCount = 2;
+    framebuffer_info.pAttachments = attachments;
+    framebuffer_info.width = vulkan->surface_caps.currentExtent.width;
+    framebuffer_info.height = vulkan->surface_caps.currentExtent.height;
+    framebuffer_info.layers = 1;
+    VK_CHECK_RES(vkCreateFramebuffer(vulkan->device, &framebuffer_info, NULL, &framebuffer));
+    
+    memset(vulkan->vulkan_object_name, 0, 128);
+    sprintf(vulkan->vulkan_object_name, "SceneColumns: Main Framebuffer");
+    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)framebuffer, vulkan->vulkan_object_name);
+    
     resolution[0] = (float)vulkan->surface_caps.currentExtent.width;
     resolution[1] = (float)vulkan->surface_caps.currentExtent.height;
 }
@@ -438,7 +421,7 @@ void SceneColumnsRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_
     frame_render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     frame_render_pass_info.pNext = NULL;
     frame_render_pass_info.renderPass = render_pass;
-    frame_render_pass_info.framebuffer = framebuffers[frame_image_index];
+    frame_render_pass_info.framebuffer = framebuffer;
     frame_render_pass_info.renderArea.extent = vulkan->surface_caps.currentExtent;
     frame_render_pass_info.renderArea.offset.x = 0;
     frame_render_pass_info.renderArea.offset.y = 0;
@@ -464,13 +447,11 @@ void SceneColumnsRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_
 
 void SceneColumnsDestroy(vulkan_context_t* vulkan)
 {
-    for (uint32_t i = 0; i < current_swapchain_image_count; i++)
-    {
-        vkDestroyFramebuffer(vulkan->device, framebuffers[i], NULL);
-    }
-    free(framebuffers);
+    vkDestroyFramebuffer(vulkan->device, framebuffer, NULL);
     vkDestroyPipeline(vulkan->device, fullscreen_graphics_pipeline, NULL);
     vkDestroyPipelineLayout(vulkan->device, fullscreen_graphics_pipeline_layout, NULL);
+    vkDestroyShaderModule(vulkan->device, fullscreen_fragment_shader, NULL);
+    vkDestroyShaderModule(vulkan->device, fullscreen_vertex_shader, NULL);
     vkDestroyDescriptorSetLayout(vulkan->device, dft_storage_buffer_descriptor_set_layout, NULL);
     vkDestroyDescriptorPool(vulkan->device, descriptor_pool, NULL);
     vkDestroyRenderPass(vulkan->device, render_pass, NULL);
