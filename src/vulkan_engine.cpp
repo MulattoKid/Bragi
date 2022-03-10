@@ -40,7 +40,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
 
     printf("Vulkan:\n");
 
-    const uint32_t target_api_version = VK_MAKE_API_VERSION(0, 1, 0, 0);
+    const uint32_t target_api_version = VK_MAKE_API_VERSION(0, 1, 3, 0);
 
     // Determine instance version
     // https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkApplicationInfo.html
@@ -409,6 +409,20 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     assert(physical_device_extensions_required_remaining == 0);
     free(physical_device_extensions);
 
+    // Physical device features
+    VkPhysicalDeviceDynamicRenderingFeatures physical_device_features_dynamic_rendering;
+    physical_device_features_dynamic_rendering.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    physical_device_features_dynamic_rendering.pNext = NULL;
+    VkPhysicalDeviceFeatures2 physical_device_features;
+    physical_device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    physical_device_features.pNext = &physical_device_features_dynamic_rendering;
+    vkGetPhysicalDeviceFeatures2(physical_device, &physical_device_features);
+    if (physical_device_features_dynamic_rendering.dynamicRendering == VK_FALSE)
+    {
+        printf("Physical device '%s' does not support VkPhysicalDeviceDynamicRenderingFeatures.dynamicRendering\n", physical_device_props.deviceName);
+        exit(EXIT_FAILURE);
+    }
+
     // Device
     float queue_priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info;
@@ -420,7 +434,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     queue_info.pQueuePriorities = &queue_priority;
     VkDeviceCreateInfo device_info;
     device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    device_info.pNext = NULL;
+    device_info.pNext = &physical_device_features_dynamic_rendering;
     device_info.flags = 0;
     device_info.queueCreateInfoCount = 1;
     device_info.pQueueCreateInfos = &queue_info;
