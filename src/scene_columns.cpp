@@ -23,7 +23,7 @@ static VkBuffer fullscreen_vertex_buffer;
 static VkDeviceMemory fullscreen_vertex_buffer_memory;
 
 // Render Passes
-static VkRenderPass render_pass;
+//static VkRenderPass render_pass;
 
 // Descriptor Pools
 static VkDescriptorPool descriptor_pool;
@@ -45,7 +45,7 @@ static VkPipelineLayout fullscreen_graphics_pipeline_layout;
 static VkPipeline fullscreen_graphics_pipeline;
 
 // Framebuffer
-static VkFramebuffer framebuffer;
+//static VkFramebuffer framebuffer;
 static float resolution[2];
 
 void SceneColumnsInit(vulkan_context_t* vulkan, VkBuffer* dft_storage_buffers)
@@ -64,7 +64,15 @@ void SceneColumnsInit(vulkan_context_t* vulkan, VkBuffer* dft_storage_buffers)
     VulkanCreateBuffer(vulkan, fullscreen_vertex_buffer_data, 6 * 4 * sizeof(float), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &fullscreen_vertex_buffer, &fullscreen_vertex_buffer_memory, "SceneColumns: Fullscreen Vertex Buffer", "SceneColumns: Fullscreen Vertex Buffer Memory");
 
     // Render pass
-    VkAttachmentDescription render_pass_output_attachment;
+    VkPipelineRenderingCreateInfo pipeline_rendering_info;
+    pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    pipeline_rendering_info.pNext = NULL;
+    pipeline_rendering_info.viewMask = 0;
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &vulkan->intermediate_swapchain_image_format;
+    pipeline_rendering_info.depthAttachmentFormat = vulkan->depth_stencil_format;
+    pipeline_rendering_info.stencilAttachmentFormat = vulkan->depth_stencil_format;
+    /*VkAttachmentDescription render_pass_output_attachment;
     render_pass_output_attachment.flags = 0;
     render_pass_output_attachment.format = vulkan->intermediate_swapchain_image_format;
     render_pass_output_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -124,7 +132,7 @@ void SceneColumnsInit(vulkan_context_t* vulkan, VkBuffer* dft_storage_buffers)
     render_pass_info.dependencyCount = 1;
     render_pass_info.pDependencies = &render_pass_dependency;
     VK_CHECK_RES(vkCreateRenderPass(vulkan->device, &render_pass_info, NULL, &render_pass));
-    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_RENDER_PASS, (uint64_t)render_pass, "SceneColumns: Main Render Pass");
+    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_RENDER_PASS, (uint64_t)render_pass, "SceneColumns: Main Render Pass");*/
 
     // Descriptor pool
     VkDescriptorPoolSize descriptor_pool_size;
@@ -337,7 +345,7 @@ void SceneColumnsInit(vulkan_context_t* vulkan, VkBuffer* dft_storage_buffers)
     VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)fullscreen_graphics_pipeline_layout, "Fullscreen Graphics Pipeline Layout (Main Render Pass)");
     VkGraphicsPipelineCreateInfo fullscreen_graphics_pipeline_info;
     fullscreen_graphics_pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    fullscreen_graphics_pipeline_info.pNext = NULL;
+    fullscreen_graphics_pipeline_info.pNext = &pipeline_rendering_info;
     fullscreen_graphics_pipeline_info.flags = 0;
     fullscreen_graphics_pipeline_info.stageCount = 2;
     fullscreen_graphics_pipeline_info.pStages = fullscreen_shader_infos;
@@ -351,109 +359,103 @@ void SceneColumnsInit(vulkan_context_t* vulkan, VkBuffer* dft_storage_buffers)
     fullscreen_graphics_pipeline_info.pColorBlendState = &fullscreen_graphics_pipeline_color_blend_info;
     fullscreen_graphics_pipeline_info.pDynamicState = &fullscreen_graphics_pipeline_dynamic_info;
     fullscreen_graphics_pipeline_info.layout = fullscreen_graphics_pipeline_layout;
-    fullscreen_graphics_pipeline_info.renderPass = render_pass;
+    fullscreen_graphics_pipeline_info.renderPass = VK_NULL_HANDLE;
     fullscreen_graphics_pipeline_info.subpass = 0;
     fullscreen_graphics_pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
     fullscreen_graphics_pipeline_info.basePipelineIndex = -1;
     VK_CHECK_RES(vkCreateGraphicsPipelines(vulkan->device, vulkan->pipeline_cache, 1, &fullscreen_graphics_pipeline_info, NULL, &fullscreen_graphics_pipeline));
     VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_PIPELINE, (uint64_t)fullscreen_graphics_pipeline, "Fullscreen Graphics Pipeline (Main Render Pass)");
-
-    // Framebuffer
-    VkImageView attachments[2] = {
-        vulkan->intermediate_swapchain_image_view,
-        vulkan->depth_stencil_image_view
-    };
-    VkFramebufferCreateInfo framebuffer_info;
-    framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebuffer_info.pNext = NULL;
-    framebuffer_info.flags = 0;
-    framebuffer_info.renderPass = render_pass;
-    framebuffer_info.attachmentCount = 2;
-    framebuffer_info.pAttachments = attachments;
-    framebuffer_info.width = vulkan->surface_caps.currentExtent.width;
-    framebuffer_info.height = vulkan->surface_caps.currentExtent.height;
-    framebuffer_info.layers = 1;
-    VK_CHECK_RES(vkCreateFramebuffer(vulkan->device, &framebuffer_info, NULL, &framebuffer));
-    
-    memset(vulkan->vulkan_object_name, 0, 128);
-    sprintf(vulkan->vulkan_object_name, "SceneColumns: Main Framebuffer");
-    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)framebuffer, vulkan->vulkan_object_name);
     
     resolution[0] = (float)vulkan->surface_caps.currentExtent.width;
     resolution[1] = (float)vulkan->surface_caps.currentExtent.height;
 }
 
 void SceneColumnsRecreateFramebuffers(vulkan_context_t* vulkan)
-{
-    // Delete old framebuffer
-    vkDestroyFramebuffer(vulkan->device, framebuffer, NULL);
-
-    // Create new framebuffer
-    VkImageView attachments[2] = {
-        vulkan->intermediate_swapchain_image_view,
-        vulkan->depth_stencil_image_view
-    };
-    VkFramebufferCreateInfo framebuffer_info;
-    framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebuffer_info.pNext = NULL;
-    framebuffer_info.flags = 0;
-    framebuffer_info.renderPass = render_pass;
-    framebuffer_info.attachmentCount = 2;
-    framebuffer_info.pAttachments = attachments;
-    framebuffer_info.width = vulkan->surface_caps.currentExtent.width;
-    framebuffer_info.height = vulkan->surface_caps.currentExtent.height;
-    framebuffer_info.layers = 1;
-    VK_CHECK_RES(vkCreateFramebuffer(vulkan->device, &framebuffer_info, NULL, &framebuffer));
-    
-    memset(vulkan->vulkan_object_name, 0, 128);
-    sprintf(vulkan->vulkan_object_name, "SceneColumns: Main Framebuffer");
-    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)framebuffer, vulkan->vulkan_object_name);
-    
+{   
     resolution[0] = (float)vulkan->surface_caps.currentExtent.width;
     resolution[1] = (float)vulkan->surface_caps.currentExtent.height;
 }
 
 void SceneColumnsRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_buffer, uint32_t frame_image_index, uint32_t frame_resource_index)
 {
+    // Color attachment
+    VkRenderingAttachmentInfo color_attachment;
+    color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    color_attachment.pNext = NULL;
+    color_attachment.imageView = vulkan->intermediate_swapchain_image_view;
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+    color_attachment.resolveImageView = VK_NULL_HANDLE;
+    color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    color_attachment.clearValue.color.float32[0] = 0.0f;
+    color_attachment.clearValue.color.float32[1] = 0.0f;
+    color_attachment.clearValue.color.float32[2] = 0.0f;
+    color_attachment.clearValue.color.float32[3] = 1.0f;
+    // Depth attachment
+    VkRenderingAttachmentInfo depth_attachment;
+    depth_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depth_attachment.pNext = NULL;
+    depth_attachment.imageView = vulkan->depth_stencil_image_view;
+    depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depth_attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+    depth_attachment.resolveImageView = VK_NULL_HANDLE;
+    depth_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment.clearValue.depthStencil.depth = 1.0f;
+    depth_attachment.clearValue.depthStencil.stencil = 0x0;
+    // Stencil attachment
+    VkRenderingAttachmentInfo stencil_attachment;
+    stencil_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    stencil_attachment.pNext = NULL;
+    stencil_attachment.imageView = vulkan->depth_stencil_image_view;
+    stencil_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    stencil_attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+    stencil_attachment.resolveImageView = VK_NULL_HANDLE;
+    stencil_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    stencil_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    stencil_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    stencil_attachment.clearValue.depthStencil.depth = 1.0f;
+    stencil_attachment.clearValue.depthStencil.stencil = 0x0;
+
+    VkRenderingInfo rendering_info;
+    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    rendering_info.pNext = NULL;
+    rendering_info.flags = 0;
+    rendering_info.renderArea.extent.width = resolution[0];
+    rendering_info.renderArea.extent.height = resolution[1];
+    rendering_info.renderArea.offset.x = 0;
+    rendering_info.renderArea.offset.y = 0;
+    rendering_info.layerCount = 1;
+    rendering_info.viewMask = 0;
+    rendering_info.colorAttachmentCount = 1;
+    rendering_info.pColorAttachments = &color_attachment;
+    rendering_info.pDepthAttachment = &depth_attachment;
+    rendering_info.pStencilAttachment = &stencil_attachment;
+
     // Main render pass
     VulkanCmdBeginDebugUtilsLabel(vulkan, frame_command_buffer, "SceneColumns: Main Render Pass");
-    VkRenderPassBeginInfo frame_render_pass_info;
-    frame_render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    frame_render_pass_info.pNext = NULL;
-    frame_render_pass_info.renderPass = render_pass;
-    frame_render_pass_info.framebuffer = framebuffer;
-    frame_render_pass_info.renderArea.extent = vulkan->surface_caps.currentExtent;
-    frame_render_pass_info.renderArea.offset.x = 0;
-    frame_render_pass_info.renderArea.offset.y = 0;
-    frame_render_pass_info.clearValueCount = 2;
-    VkClearValue clear_values[2];
-    clear_values[0].color.float32[0] = 0.0;
-    clear_values[0].color.float32[1] = 0.0;
-    clear_values[0].color.float32[2] = 0.0;
-    clear_values[0].color.float32[3] = 1.0f;
-    clear_values[1].depthStencil.depth = 1.0f;
-    clear_values[1].depthStencil.stencil = 0;
-    frame_render_pass_info.pClearValues = clear_values;
-    vkCmdBeginRenderPass(frame_command_buffer, &frame_render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+    VulkanCmdTransitionImageLayout(vulkan, frame_command_buffer, vulkan->intermediate_swapchain_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT , 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT);
+    vkCmdBeginRendering(frame_command_buffer, &rendering_info);
     vkCmdBindPipeline(frame_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fullscreen_graphics_pipeline);
     vkCmdBindDescriptorSets(frame_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fullscreen_graphics_pipeline_layout, 0, 1, &dft_storage_buffer_descriptor_sets[frame_resource_index], 0, NULL);
     vkCmdPushConstants(frame_command_buffer, fullscreen_graphics_pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 2 * sizeof(float), &resolution);
     VkDeviceSize fullscreen_vertex_buffer_offset = 0;
     vkCmdBindVertexBuffers(frame_command_buffer, 0, 1, &fullscreen_vertex_buffer, &fullscreen_vertex_buffer_offset);
     vkCmdDraw(frame_command_buffer, 6, 1, 0, 0);
-    vkCmdEndRenderPass(frame_command_buffer);
+    vkCmdEndRendering(frame_command_buffer);
     VulkanCmdEndDebugUtilsLabel(vulkan, frame_command_buffer);
 }
 
 void SceneColumnsDestroy(vulkan_context_t* vulkan)
 {
-    vkDestroyFramebuffer(vulkan->device, framebuffer, NULL);
     vkDestroyPipeline(vulkan->device, fullscreen_graphics_pipeline, NULL);
     vkDestroyPipelineLayout(vulkan->device, fullscreen_graphics_pipeline_layout, NULL);
     vkDestroyShaderModule(vulkan->device, fullscreen_fragment_shader, NULL);
     vkDestroyShaderModule(vulkan->device, fullscreen_vertex_shader, NULL);
     vkDestroyDescriptorSetLayout(vulkan->device, dft_storage_buffer_descriptor_set_layout, NULL);
     vkDestroyDescriptorPool(vulkan->device, descriptor_pool, NULL);
-    vkDestroyRenderPass(vulkan->device, render_pass, NULL);
     VulkanDestroyBuffer(vulkan, &fullscreen_vertex_buffer, &fullscreen_vertex_buffer_memory);
 }
