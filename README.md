@@ -10,9 +10,13 @@
 
 I want to be able to use *Bragi* while programming, playing games, and casting it to a big screen to get pretty colors synced with the music.
 
+## YouTube Development Playlist
+I'm recording some of the development of Bragi on my [YouTube Channel](https://youtube.com/playlist?list=PLEmaPUbTbK61ujCCmo5MK1ZlCfhstcBSI).
+
 ## Key Combos
 - `Esc` : quit
 - `Shift + Enter` : open/close UI
+- `Enter` : submit command when UI is open
 
 ## Commands
 - `play <path to playlist>` : start playing a playlist (shuffle state determines initial song)

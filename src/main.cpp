@@ -168,7 +168,7 @@ int main(int argc, char** argv)
     //  5) Build command buffer using frame-in-flight's resources
     //  6) Submit command buffer (wait for step 3 to actually acquire swapchain image)
     //  7) Present frame's image (wait for step 6 to finish rendering the frame)
-    // 
+    //
     uint32_t frame_number = 0;
     while (1)
     {

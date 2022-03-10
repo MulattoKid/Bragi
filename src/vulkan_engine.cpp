@@ -841,7 +841,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     }
 
     // Update vulkan_context
-    vulkan->target_api_version                 = target_api_version;
+    vulkan->target_api_version                  = target_api_version;
     vulkan->instance_api_version                = instance_api_version;
     vulkan->physical_device_api_version         = physical_device_props.apiVersion;
     vulkan->physical_device                     = physical_device;
