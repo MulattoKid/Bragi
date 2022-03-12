@@ -75,9 +75,6 @@ static VkDescriptorSetLayout font_image_sampler_descriptor_set_layout;
 // Descriptor Sets
 static VkDescriptorSet font_image_sampler_descriptor_set;
 
-// Render Passes
-static VkRenderPass render_pass;
-
 // Shaders
 static VkShaderModule command_line_background_vertex_shader;
 static VkShaderModule command_line_background_fragment_shader;
@@ -92,8 +89,7 @@ static VkPipelineLayout command_line_text_graphics_pipeline_layout;
 static VkPipeline command_line_background_graphics_pipeline;
 static VkPipeline command_line_text_graphics_pipeline;
 
-// Framebuffer
-static VkFramebuffer framebuffer;
+// Viewport resolution
 static float resolution[2];
 
 void SceneUIInit(vulkan_context_t* vulkan)
@@ -217,50 +213,14 @@ void SceneUIInit(vulkan_context_t* vulkan)
     }
 
     // Render pass
-    VkAttachmentDescription render_pass_output_attachment;
-    render_pass_output_attachment.flags = 0;
-    render_pass_output_attachment.format = vulkan->intermediate_swapchain_image_format;
-    render_pass_output_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    render_pass_output_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    render_pass_output_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    render_pass_output_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    render_pass_output_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    render_pass_output_attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    render_pass_output_attachment.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    VkAttachmentReference render_pass_subpass_output_attachment;
-    render_pass_subpass_output_attachment.attachment = 0;
-    render_pass_subpass_output_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    VkSubpassDescription render_pass_subpass;
-    render_pass_subpass.flags = 0;
-    render_pass_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    render_pass_subpass.inputAttachmentCount = 0;
-    render_pass_subpass.pInputAttachments = NULL;
-    render_pass_subpass.colorAttachmentCount = 1;
-    render_pass_subpass.pColorAttachments = &render_pass_subpass_output_attachment;
-    render_pass_subpass.pResolveAttachments = NULL;
-    render_pass_subpass.pDepthStencilAttachment = NULL;
-    render_pass_subpass.preserveAttachmentCount = 0;
-    render_pass_subpass.pPreserveAttachments = NULL;
-    VkSubpassDependency render_pass_dependency;
-    render_pass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    render_pass_dependency.dstSubpass = 0;
-    render_pass_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    render_pass_dependency.srcAccessMask = 0;
-    render_pass_dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    render_pass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    render_pass_dependency.dependencyFlags = 0;
-    VkRenderPassCreateInfo render_pass_info;
-    render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    render_pass_info.pNext = NULL;
-    render_pass_info.flags = 0;
-    render_pass_info.attachmentCount = 1;
-    render_pass_info.pAttachments = &render_pass_output_attachment;
-    render_pass_info.subpassCount = 1;
-    render_pass_info.pSubpasses = &render_pass_subpass;
-    render_pass_info.dependencyCount = 1;
-    render_pass_info.pDependencies = &render_pass_dependency;
-    VK_CHECK_RES(vkCreateRenderPass(vulkan->device, &render_pass_info, NULL, &render_pass));
-    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_RENDER_PASS, (uint64_t)render_pass, "UI Render Pass");
+    VkPipelineRenderingCreateInfo pipeline_rendering_info;
+    pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    pipeline_rendering_info.pNext = NULL;
+    pipeline_rendering_info.viewMask = 0;
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &vulkan->intermediate_swapchain_image_format;
+    pipeline_rendering_info.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
+    pipeline_rendering_info.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
     // Descriptor pool
     VkDescriptorPoolSize descriptor_pool_size;
@@ -465,7 +425,7 @@ void SceneUIInit(vulkan_context_t* vulkan)
     VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)command_line_background_graphics_pipeline_layout, "Command Line Background Graphics Pipeline Layout (Main Render Pass)");
     VkGraphicsPipelineCreateInfo command_line_background_graphics_pipeline_info;
     command_line_background_graphics_pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    command_line_background_graphics_pipeline_info.pNext = NULL;
+    command_line_background_graphics_pipeline_info.pNext = &pipeline_rendering_info;
     command_line_background_graphics_pipeline_info.flags = 0;
     command_line_background_graphics_pipeline_info.stageCount = 2;
     command_line_background_graphics_pipeline_info.pStages = command_line_background_shader_infos;
@@ -479,7 +439,8 @@ void SceneUIInit(vulkan_context_t* vulkan)
     command_line_background_graphics_pipeline_info.pColorBlendState = &command_line_background_graphics_pipeline_color_blend_info;
     command_line_background_graphics_pipeline_info.pDynamicState = &command_line_background_graphics_pipeline_dynamic_info;
     command_line_background_graphics_pipeline_info.layout = command_line_background_graphics_pipeline_layout;
-    command_line_background_graphics_pipeline_info.renderPass = render_pass;
+    //command_line_background_graphics_pipeline_info.renderPass = render_pass;
+    command_line_background_graphics_pipeline_info.renderPass = VK_NULL_HANDLE;
     command_line_background_graphics_pipeline_info.subpass = 0;
     command_line_background_graphics_pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
     command_line_background_graphics_pipeline_info.basePipelineIndex = -1;
@@ -643,7 +604,7 @@ void SceneUIInit(vulkan_context_t* vulkan)
     VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)command_line_text_graphics_pipeline_layout, "Command Line Text Graphics Pipeline Layout (Main Render Pass)");
     VkGraphicsPipelineCreateInfo command_line_text_graphics_pipeline_info;
     command_line_text_graphics_pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    command_line_text_graphics_pipeline_info.pNext = NULL;
+    command_line_text_graphics_pipeline_info.pNext = &pipeline_rendering_info;
     command_line_text_graphics_pipeline_info.flags = 0;
     command_line_text_graphics_pipeline_info.stageCount = 2;
     command_line_text_graphics_pipeline_info.pStages = command_line_text_shader_infos;
@@ -657,56 +618,22 @@ void SceneUIInit(vulkan_context_t* vulkan)
     command_line_text_graphics_pipeline_info.pColorBlendState = &command_line_text_graphics_pipeline_color_blend_info;
     command_line_text_graphics_pipeline_info.pDynamicState = &command_line_text_graphics_pipeline_dynamic_info;
     command_line_text_graphics_pipeline_info.layout = command_line_text_graphics_pipeline_layout;
-    command_line_text_graphics_pipeline_info.renderPass = render_pass;
+    //command_line_text_graphics_pipeline_info.renderPass = render_pass;
+    command_line_text_graphics_pipeline_info.renderPass = VK_NULL_HANDLE;
     command_line_text_graphics_pipeline_info.subpass = 0;
     command_line_text_graphics_pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
     command_line_text_graphics_pipeline_info.basePipelineIndex = -1;
     VK_CHECK_RES(vkCreateGraphicsPipelines(vulkan->device, vulkan->pipeline_cache, 1, &command_line_text_graphics_pipeline_info, NULL, &command_line_text_graphics_pipeline));
     VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_PIPELINE, (uint64_t)command_line_text_graphics_pipeline, "Command Line Text Graphics Pipeline (Main Render Pass)");
-
-    // Framebuffer
-    VkFramebufferCreateInfo framebuffer_info;
-    framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebuffer_info.pNext = NULL;
-    framebuffer_info.flags = 0;
-    framebuffer_info.renderPass = render_pass;
-    framebuffer_info.attachmentCount = 1;
-    framebuffer_info.pAttachments = &vulkan->intermediate_swapchain_image_view;
-    framebuffer_info.width = vulkan->surface_caps.currentExtent.width;
-    framebuffer_info.height = vulkan->surface_caps.currentExtent.height;
-    framebuffer_info.layers = 1;
-    VK_CHECK_RES(vkCreateFramebuffer(vulkan->device, &framebuffer_info, NULL, &framebuffer));
     
-    memset(vulkan->vulkan_object_name, 0, 128);
-    sprintf(vulkan->vulkan_object_name, "Main Framebuffer");
-    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)framebuffer, vulkan->vulkan_object_name);
-    
-    float resolution[2] = { (float)vulkan->surface_caps.currentExtent.width, (float)vulkan->surface_caps.currentExtent.height };
+    resolution[0] = (float)vulkan->surface_caps.currentExtent.width;
+    resolution[1] = (float)vulkan->surface_caps.currentExtent.height;
 }
 
 void SceneUIRecreateFramebuffers(vulkan_context_t* vulkan)
 {
-    // Delete old framebuffer
-    vkDestroyFramebuffer(vulkan->device, framebuffer, NULL);
-
-    // Create new framebuffer
-    VkFramebufferCreateInfo framebuffer_info;
-    framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebuffer_info.pNext = NULL;
-    framebuffer_info.flags = 0;
-    framebuffer_info.renderPass = render_pass;
-    framebuffer_info.attachmentCount = 1;
-    framebuffer_info.pAttachments = &vulkan->intermediate_swapchain_image_view;
-    framebuffer_info.width = vulkan->surface_caps.currentExtent.width;
-    framebuffer_info.height = vulkan->surface_caps.currentExtent.height;
-    framebuffer_info.layers = 1;
-    VK_CHECK_RES(vkCreateFramebuffer(vulkan->device, &framebuffer_info, NULL, &framebuffer));
-    
-    memset(vulkan->vulkan_object_name, 0, 128);
-    sprintf(vulkan->vulkan_object_name, "Main Framebuffer");
-    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)framebuffer, vulkan->vulkan_object_name);
-    
-    float resolution[2] = { (float)vulkan->surface_caps.currentExtent.width, (float)vulkan->surface_caps.currentExtent.height };
+    resolution[0] = (float)vulkan->surface_caps.currentExtent.width;
+    resolution[1] = (float)vulkan->surface_caps.currentExtent.height;
 }
 
 static void InfoSectionSetErrorMessage(const char* error_message, char* info_section_text, size_t* info_section_text_string_length)
@@ -791,25 +718,39 @@ void SceneUIRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_buffe
     // No synchronization is neccessary between the scene's render pass(es) and the UI render pass, as the UI render pass
     // only writes to the intermediate swapchain image, which the scene's render pass(es) also do
     VulkanCmdBeginDebugUtilsLabel(vulkan, frame_command_buffer, "UI Render Pass");
-    VkRenderPassBeginInfo frame_render_pass_info;
-    frame_render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    frame_render_pass_info.pNext = NULL;
-    frame_render_pass_info.renderPass = render_pass;
-    frame_render_pass_info.framebuffer = framebuffer;
-    frame_render_pass_info.renderArea.extent = vulkan->surface_caps.currentExtent;
-    frame_render_pass_info.renderArea.offset.x = 0;
-    frame_render_pass_info.renderArea.offset.y = 0;
-    frame_render_pass_info.clearValueCount = 1;
-    VkClearValue clear_value_output_attachment;
-    clear_value_output_attachment.color.float32[0] = 0.0;
-    clear_value_output_attachment.color.float32[1] = 0.0;
-    clear_value_output_attachment.color.float32[2] = 0.0;
-    clear_value_output_attachment.color.float32[3] = 0.0f;
-    frame_render_pass_info.pClearValues = &clear_value_output_attachment;
-    vkCmdBeginRenderPass(frame_command_buffer, &frame_render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
     
     if (ui_showing)
     {
+        VkRenderingAttachmentInfo color_attachment;
+        color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        color_attachment.pNext = NULL;
+        color_attachment.imageView = vulkan->intermediate_swapchain_image_view;
+        color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        color_attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+        color_attachment.resolveImageView = VK_NULL_HANDLE;
+        color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        color_attachment.clearValue.color.float32[0] = 0.0f;
+        color_attachment.clearValue.color.float32[1] = 0.0f;
+        color_attachment.clearValue.color.float32[2] = 0.0f;
+        color_attachment.clearValue.color.float32[3] = 1.0f;
+        VkRenderingInfo rendering_info;
+        rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        rendering_info.pNext = NULL;
+        rendering_info.flags = 0;
+        rendering_info.renderArea.extent.width = resolution[0];
+        rendering_info.renderArea.extent.height = resolution[1];
+        rendering_info.renderArea.offset.x = 0;
+        rendering_info.renderArea.offset.y = 0;
+        rendering_info.layerCount = 1;
+        rendering_info.viewMask = 0;
+        rendering_info.colorAttachmentCount = 1;
+        rendering_info.pColorAttachments = &color_attachment;
+        rendering_info.pDepthAttachment = NULL;
+        rendering_info.pStencilAttachment = NULL;
+        vkCmdBeginRendering(frame_command_buffer, &rendering_info);
+
         // Info section background
         vkCmdBindPipeline(frame_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, command_line_background_graphics_pipeline);
         vkCmdPushConstants(frame_command_buffer, command_line_background_graphics_pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4 * sizeof(float), &info_section_background_color);
@@ -988,16 +929,15 @@ void SceneUIRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_buffe
         VkDeviceSize command_line_text_vertex_buffer_offset = 0;
         vkCmdBindVertexBuffers(frame_command_buffer, 0, 1, &command_line_text_vertex_buffers[frame_resource_index], &command_line_text_vertex_buffer_offset);
         vkCmdDraw(frame_command_buffer, sound_player_command_string_length * 6, 1, 0, 0);
+        vkCmdEndRendering(frame_command_buffer);
     }
-
-    // End
-    vkCmdEndRenderPass(frame_command_buffer);
+    VulkanCmdTransitionImageLayout(vulkan, frame_command_buffer, vulkan->intermediate_swapchain_image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT);
+    
     VulkanCmdEndDebugUtilsLabel(vulkan, frame_command_buffer);
 }
 
 void SceneUIDestroy(vulkan_context_t* vulkan)
 {
-    vkDestroyFramebuffer(vulkan->device, framebuffer, NULL);
     vkDestroyPipeline(vulkan->device, command_line_text_graphics_pipeline, NULL);
     vkDestroyPipeline(vulkan->device, command_line_background_graphics_pipeline, NULL);
     vkDestroyPipelineLayout(vulkan->device, command_line_text_graphics_pipeline_layout, NULL);
@@ -1006,7 +946,6 @@ void SceneUIDestroy(vulkan_context_t* vulkan)
     vkDestroyShaderModule(vulkan->device, command_line_background_fragment_shader, NULL);
     vkDestroyShaderModule(vulkan->device, command_line_text_vertex_shader, NULL);
     vkDestroyShaderModule(vulkan->device, command_line_text_fragment_shader, NULL);
-    vkDestroyRenderPass(vulkan->device, render_pass, NULL);
     vkDestroyDescriptorSetLayout(vulkan->device, font_image_sampler_descriptor_set_layout, NULL);
     vkDestroyDescriptorPool(vulkan->device, descriptor_pool, NULL);
     vkDestroySampler(vulkan->device, font_image_sampler, NULL);

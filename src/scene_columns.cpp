@@ -23,7 +23,6 @@ static VkBuffer fullscreen_vertex_buffer;
 static VkDeviceMemory fullscreen_vertex_buffer_memory;
 
 // Render Passes
-//static VkRenderPass render_pass;
 
 // Descriptor Pools
 static VkDescriptorPool descriptor_pool;
@@ -44,8 +43,7 @@ static VkPipelineLayout fullscreen_graphics_pipeline_layout;
 // Graphics Pipelines
 static VkPipeline fullscreen_graphics_pipeline;
 
-// Framebuffer
-//static VkFramebuffer framebuffer;
+// Viewport resolution
 static float resolution[2];
 
 void SceneColumnsInit(vulkan_context_t* vulkan, VkBuffer* dft_storage_buffers)
@@ -72,67 +70,6 @@ void SceneColumnsInit(vulkan_context_t* vulkan, VkBuffer* dft_storage_buffers)
     pipeline_rendering_info.pColorAttachmentFormats = &vulkan->intermediate_swapchain_image_format;
     pipeline_rendering_info.depthAttachmentFormat = vulkan->depth_stencil_format;
     pipeline_rendering_info.stencilAttachmentFormat = vulkan->depth_stencil_format;
-    /*VkAttachmentDescription render_pass_output_attachment;
-    render_pass_output_attachment.flags = 0;
-    render_pass_output_attachment.format = vulkan->intermediate_swapchain_image_format;
-    render_pass_output_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    render_pass_output_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    render_pass_output_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    render_pass_output_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    render_pass_output_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    render_pass_output_attachment.initialLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    render_pass_output_attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    VkAttachmentDescription render_pass_depth_stencil_attachment;
-    render_pass_depth_stencil_attachment.flags = 0;
-    render_pass_depth_stencil_attachment.format = VK_FORMAT_D24_UNORM_S8_UINT;
-    render_pass_depth_stencil_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    render_pass_depth_stencil_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    render_pass_depth_stencil_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    render_pass_depth_stencil_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    render_pass_depth_stencil_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    render_pass_depth_stencil_attachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    render_pass_depth_stencil_attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    VkAttachmentDescription render_pass_attachments[2] = {
-        render_pass_output_attachment,
-        render_pass_depth_stencil_attachment
-    };
-    VkAttachmentReference render_pass_subpass_output_attachment;
-    render_pass_subpass_output_attachment.attachment = 0;
-    render_pass_subpass_output_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    VkAttachmentReference render_pass_subpass_depth_stencil_attachment;
-    render_pass_subpass_depth_stencil_attachment.attachment = 1;
-    render_pass_subpass_depth_stencil_attachment.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    VkSubpassDescription render_pass_subpass;
-    render_pass_subpass.flags = 0;
-    render_pass_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    render_pass_subpass.inputAttachmentCount = 0;
-    render_pass_subpass.pInputAttachments = NULL;
-    render_pass_subpass.colorAttachmentCount = 1;
-    render_pass_subpass.pColorAttachments = &render_pass_subpass_output_attachment;
-    render_pass_subpass.pResolveAttachments = NULL;
-    render_pass_subpass.pDepthStencilAttachment = &render_pass_subpass_depth_stencil_attachment;
-    render_pass_subpass.preserveAttachmentCount = 0;
-    render_pass_subpass.pPreserveAttachments = NULL;
-    VkSubpassDependency render_pass_dependency;
-    render_pass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    render_pass_dependency.dstSubpass = 0;
-    render_pass_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    render_pass_dependency.srcAccessMask = 0;
-    render_pass_dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    render_pass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    render_pass_dependency.dependencyFlags = 0;
-    VkRenderPassCreateInfo render_pass_info;
-    render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    render_pass_info.pNext = NULL;
-    render_pass_info.flags = 0;
-    render_pass_info.attachmentCount = 2;
-    render_pass_info.pAttachments = render_pass_attachments;
-    render_pass_info.subpassCount = 1;
-    render_pass_info.pSubpasses = &render_pass_subpass;
-    render_pass_info.dependencyCount = 1;
-    render_pass_info.pDependencies = &render_pass_dependency;
-    VK_CHECK_RES(vkCreateRenderPass(vulkan->device, &render_pass_info, NULL, &render_pass));
-    VulkanSetObjectName(vulkan, VK_OBJECT_TYPE_RENDER_PASS, (uint64_t)render_pass, "SceneColumns: Main Render Pass");*/
 
     // Descriptor pool
     VkDescriptorPoolSize descriptor_pool_size;
