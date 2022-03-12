@@ -931,7 +931,6 @@ void SceneUIRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_buffe
         vkCmdDraw(frame_command_buffer, sound_player_command_string_length * 6, 1, 0, 0);
         vkCmdEndRendering(frame_command_buffer);
     }
-    VulkanCmdTransitionImageLayout(vulkan, frame_command_buffer, vulkan->intermediate_swapchain_image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT);
     
     VulkanCmdEndDebugUtilsLabel(vulkan, frame_command_buffer);
 }

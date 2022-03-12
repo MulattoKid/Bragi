@@ -374,7 +374,6 @@ void SceneColumnsRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_
 
     // Main render pass
     VulkanCmdBeginDebugUtilsLabel(vulkan, frame_command_buffer, "SceneColumns: Main Render Pass");
-    VulkanCmdTransitionImageLayout(vulkan, frame_command_buffer, vulkan->intermediate_swapchain_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT , 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT);
     vkCmdBeginRendering(frame_command_buffer, &rendering_info);
     vkCmdBindPipeline(frame_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fullscreen_graphics_pipeline);
     vkCmdBindDescriptorSets(frame_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fullscreen_graphics_pipeline_layout, 0, 1, &dft_storage_buffer_descriptor_sets[frame_resource_index], 0, NULL);

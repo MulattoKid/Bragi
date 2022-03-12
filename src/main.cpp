@@ -91,12 +91,6 @@ int main(int argc, char** argv)
     bool window_key_shift_held = false;
 
 
-    /////////////////
-    // UI settings //
-    /////////////////
-    bool ui_command_line_showing = false;
-
-
 
 
     //////////////////
@@ -105,6 +99,18 @@ int main(int argc, char** argv)
     // Init Vulkan
     vulkan_context_t vulkan;
     VulkanInit(instance, window, &vulkan);
+
+
+
+
+    /////////////////
+    // Settings //
+    /////////////////
+    bool ui_command_line_showing = false;
+    bool viz_enabled = true;
+
+
+
 
     // DFT data
     DWORD dft_previous_frame_sample_position = 0;
@@ -356,6 +362,14 @@ int main(int argc, char** argv)
                                 SceneColumnsRecreateFramebuffers(&vulkan);
                                 SceneUIRecreateFramebuffers(&vulkan);
                             }
+                            else if (strcmp(command, "viz_enable") == 0)
+                            {
+                                viz_enabled = true;
+                            }
+                            else if (strcmp(command, "viz_disable") == 0)
+                            {
+                                viz_enabled = false;
+                            }
                             else if (strcmp(command, "generate_playlist") == 0)
                             {
                                 if (argument == NULL)
@@ -567,7 +581,8 @@ reset_sound_player_command:
             }
         }
         // Get and store samples to be used for DFT from sound player
-        if (sound_player_shared_data.audio_device != NULL)
+        if ((viz_enabled == true) &&
+            (sound_player_shared_data.audio_device != NULL))
         {
             MMTIME playback_position;
             playback_position.wType = TIME_SAMPLES;
@@ -577,6 +592,7 @@ reset_sound_player_command:
             dft_previous_frame_sample_position = dft_current_frame_sample_position;
             dft_current_frame_sample_position = playback_position.u.sample;
 
+            // Playback has started
             if (dft_current_frame_sample_position > 0)
             {
                 // Ensure we don't compute the DFT on too many sampels (e.g. if we tab out and back in after a while)
@@ -597,7 +613,8 @@ reset_sound_player_command:
         SyncReleaseMutex(sound_player_shared_data.mutex, __FILE__, __LINE__);
 
         // Potentially compute DFT
-        if (audio_data_size > 0)
+        if ((viz_enabled == true) &&
+            (audio_data_size > 0))
         {
             float* dft_bands = NULL;
             VK_CHECK_RES(vkMapMemory(vulkan.device, dft_storage_buffer_memories[frame_resource_index], 0, VK_WHOLE_SIZE, 0, (void**)&dft_bands));
@@ -681,6 +698,9 @@ reset_sound_player_command:
         pre_frame_barrier.dstAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         vkCmdPipelineBarrier(frame_command_buffer, srcStage, dstStage, 0, 1, &pre_frame_barrier, 0, NULL, 0, NULL);
 
+        // Transition intermediate swapchain image from TRANSFER_SRC to COLOR_ATTACHMENT
+        VulkanCmdTransitionImageLayout(&vulkan, frame_command_buffer, vulkan.intermediate_swapchain_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT , 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT);
+
         // Render scene
         // Requirements:
         //  1) The intermediate swapchain image is ready to be written to from the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage
@@ -692,7 +712,10 @@ reset_sound_player_command:
         //  7) The function is responsible for ensuring all other synchronization
         //    a) Any other barriers regarding the intermediate swapchain or depth/stencil image
         //    b) Using the correct resources for the current frame (framebuffer corresponding to frame_image_index, and resources corresponding to frame_resource_index)
-        SceneColumnsRender(&vulkan, frame_command_buffer, frame_image_index, frame_resource_index);
+        if (viz_enabled == true)
+        {
+            SceneColumnsRender(&vulkan, frame_command_buffer, frame_image_index, frame_resource_index);
+        }
 
         // Ensure color has been written out before writing color in the UI render pass
         VkMemoryBarrier ui_frame_barrier;
@@ -707,6 +730,9 @@ reset_sound_player_command:
 
         // Barrier
         //VulkanCmdBeginDebugUtilsLabel(&vulkan, frame_command_buffer, "Blit Intermediate Swapchain Image to Swapchain Image");
+        // Transfer intermediate swapchain image from COLOR_ATTACHMENT to TRANSFER_SRC
+        VulkanCmdTransitionImageLayout(&vulkan, frame_command_buffer, vulkan.intermediate_swapchain_image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT);
+        // Transfer swapchain image from PRESENT_SRC to TRANSFER_DST
         VulkanCmdTransitionImageLayout(&vulkan, frame_command_buffer, vulkan.swapchain_images[frame_image_index], VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, 0);
 
         // Blit intermediate output to swapchain
