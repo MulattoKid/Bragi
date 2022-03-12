@@ -46,3 +46,15 @@ I'm recording some of the development of Bragi on my [YouTube Channel](https://y
 ## System Requirements
 - Windows
 - GPU with Vulkan 1.0 support
+
+## Browsing Commits
+All commits have a tag, e.g. 'Vulkan'. This makes browsing/searching through commits easier. The following tags are used:
+| Tag     | Description                                |
+|---------|--------------------------------------------|
+| Docs    | Any changes related to documentation       |
+| FLAC    | Any changes related to the FLAC decoder    |
+| SndPly  | Any changes related to the sound player    |
+| Viz     | Any changes related to audio visualization |
+| Vulkan  | Any changes related to the Vulkan renderer |
+| WAV     | Any changes related to the WAV decoder     |
+| Windows | Any changes related to Windows             |
