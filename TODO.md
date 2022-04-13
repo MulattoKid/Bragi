@@ -7,6 +7,7 @@
 - Add more audio visualizations
     - Some kind of flow
 - Slow down songs during playback
+- Support fullscreen-exclusive, fullscreen-borderless, almost-fullscreen-borderless
 
 # DONE
 - ~~Allow for disabling audio visualization~~

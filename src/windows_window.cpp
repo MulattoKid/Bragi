@@ -235,8 +235,11 @@ void WindowTaskbarHide(HWND window)
 
 void WindowFullscreenMode(HWND window)
 {
-    // TODO: Support 
+    // TODO: Support
+    // https://www.nvidia.com/content/Control-Panel-Help/vLatest/en-us/mergedProjects/nvdsp/To_know_if_VRR_is_turned_on_in_your_game.htm
+    // https://devblogs.microsoft.com/directx/demystifying-full-screen-optimizations/
     // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-changedisplaysettingsa
+    //      ChangeDisplaySettings(&dmSettings,CDS_FULLSCREEN);
     // https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VK_EXT_full_screen_exclusive.html
     assert(0);
 }
