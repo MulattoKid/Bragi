@@ -19,6 +19,7 @@
 #include "wav.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,8 +61,10 @@ song_error_e WAVLoad(song_t* song)
         uint32_t subchunk_size = (uint32_t)*((byte_t*)wav_header_packed + new_index);
         new_index += 4;
 
-        // Determine where this subchunk ends        
-        if (strncmp((char*)((byte_t*)wav_header_packed + index), "JUNK", 4) == 0)
+        // Determine where this subchunk ends
+        if (strncmp((char*)((byte_t*)wav_header_packed + index), "LIST", 4) == 0)
+        {}
+        else if (strncmp((char*)((byte_t*)wav_header_packed + index), "JUNK", 4) == 0)
         {
             if (subchunk_size % 2 != 0)
             {
@@ -72,7 +75,7 @@ song_error_e WAVLoad(song_t* song)
         {}
         else
         {
-            printf("WAV subchunk type '%s' not supported\n", (char*)wav_header_packed);
+            printf("WAV subchunk type '%s' not supported\n", (char*)(wav_header_packed + index));
             assert(0);
         }
         new_index += subchunk_size;
@@ -92,14 +95,149 @@ song_error_e WAVLoad(song_t* song)
 
     wav_subchunk_header_packed_t* wav_data_subchunk_packed = (wav_subchunk_header_packed_t*)((byte_t*)wav_header_packed + index);
     byte_t* wav_audio_data = (byte_t*)wav_data_subchunk_packed + sizeof(wav_subchunk_header_packed_t);
-
+    
+    // TODO: Optimize
+    // TODO: move sample-rate conversion elsewhere so that it's no longer WAV specific.
     // Assign WAV info and data to song
+#if 0
     song->audio_data = (byte_t*)malloc(wav_data_subchunk_packed->subchunk2_size);
     memcpy(song->audio_data, wav_audio_data, wav_data_subchunk_packed->subchunk2_size);
     song->audio_data_size = wav_data_subchunk_packed->subchunk2_size;
     song->sample_rate = wav_header_packed->sample_rate;
     song->channel_count = wav_header_packed->channel_count;
     song->bits_per_sample = wav_header_packed->bits_per_sample;
+#else
+    int32_t bps = wav_header_packed->bits_per_sample / 8;
+    assert(bps == 2);
+    int32_t sample_count = wav_data_subchunk_packed->subchunk2_size / bps;
+    assert(sample_count % 2 == 0);
+    int32_t halfway_index = sample_count / 2;
+    // Deinterleave
+    byte_t* deinterleaved_wav_audio_data = (byte_t*)malloc(sample_count * bps);
+    int32_t deinterleaved_index0 = 0, deinterleaved_index1 = halfway_index;
+    for (int32_t i = 0; i < sample_count; i++)
+    {
+        if (i % 2 == 0)
+        {
+            memcpy(deinterleaved_wav_audio_data + (deinterleaved_index0 * bps), wav_audio_data + (i * bps), bps);
+            deinterleaved_index0++;
+        }
+        else
+        {
+            memcpy(deinterleaved_wav_audio_data + (deinterleaved_index1 * bps), wav_audio_data + (i * bps), bps);
+            deinterleaved_index1++;
+        }
+    }
+    // Perform sample-rate conversion
+    float slow_down_factor = 0.9f;
+    float resampling_factor = (1.0f - slow_down_factor) + 1.0f;
+    assert(slow_down_factor < 1.0f);
+    assert(resampling_factor >= 1.0f);
+    assert(resampling_factor < 2.0f);
+    int32_t input_rate = wav_header_packed->sample_rate;
+    int32_t final_rate = input_rate * resampling_factor;
+    // Find greatest common divisor
+    // https://en.wikipedia.org/wiki/Euclidean_algorithm#Implementations
+    int32_t a = input_rate;
+    int32_t b = final_rate;
+    while (b != 0)
+    {
+        int32_t t = b;
+        b = a % b;
+        a = t;
+    }
+    int32_t L = final_rate / a; // Upsampling factor
+    int32_t M = input_rate / a; // Decimation factor
+    // Upsample by zero-stuffing
+    int32_t sample_count_upsampled = sample_count * (L + 1);
+    byte_t* upsampled_audio_data = (byte_t*)malloc(sample_count_upsampled * bps);
+    memset(upsampled_audio_data, 0, sample_count_upsampled * bps);
+    for (int32_t i = 0; i < sample_count; i++)
+    {
+        memcpy(upsampled_audio_data + (i * (L + 1) * bps), deinterleaved_wav_audio_data + (i * bps), bps);
+    }
+    // Create filter
+    const float pi = 3.14159265359f;
+    const int32_t filter_length = 64;
+    int32_t filter_shift = filter_length / 2;
+    int32_t filter_sample_rate = input_rate * (L + 1);
+    float filter_sample_delta = 1.0f / (float)filter_sample_rate;
+    float cutoff_freq = wav_header_packed->sample_rate / 2;
+    float hamming_constant = 0.53836f;
+    float filter[filter_length];
+    float filter_sum = 0.0f;
+    for (int32_t i = 0; i < filter_length; i++)
+    {
+        int32_t sample_index_shifted = i;
+        int32_t sample_index = i - filter_shift;
+        float sample_time = float(sample_index) * filter_sample_delta;
+
+        float sinc_value = 2.0f * cutoff_freq;
+        if (sample_index != 0)
+        {
+            sinc_value = sinf(2.0 * pi * cutoff_freq * sample_time) / (pi * sample_time);
+        }
+        float hamming_value = hamming_constant - ((1.0 - hamming_constant) * cosf((2.0 * pi * float(sample_index_shifted)) / float(filter_length - 1)));
+        filter[i] = sinc_value * hamming_value;
+        filter_sum += fabs(filter[i]);
+    }
+    for (int32_t i = 0; i < filter_length; i++)
+    {
+        filter[i] /= filter_sum;
+    }
+    // Filter
+    assert(bps == 2);
+    byte_t* upsampled_audio_data_filtered = (byte_t*)malloc(sample_count_upsampled * bps);
+    for (int32_t i = 0; i < sample_count_upsampled; i++)
+    {
+        float filtered_sample = 0.0f;
+        int32_t filter_length_for_sample = min(filter_length, sample_count_upsampled - i);
+        for (int32_t j = 0; j < filter_length_for_sample; j++)
+        {
+            filtered_sample += (float)((int16_t*)upsampled_audio_data)[i + j] * filter[j];
+        }
+        ((int16_t*)upsampled_audio_data_filtered)[i] = filtered_sample;
+    }
+    // Decimate
+    int32_t sample_count_final = sample_count_upsampled / M;
+    byte_t* upsampled_audio_data_final = (byte_t*)malloc(sample_count_final * bps);
+    for (int32_t i = 0; i < sample_count_final; i++)
+    {
+        ((int16_t*)upsampled_audio_data_final)[i] = ((int16_t*)upsampled_audio_data_filtered)[i * M];
+    }
+    // Interleave 
+    byte_t* interleaved_upsampled_audio_data_final = (byte_t*)malloc(sample_count_final * bps);
+    assert(sample_count_final % 2 == 0);
+    halfway_index = sample_count_final / 2;
+    deinterleaved_index0 = 0, deinterleaved_index1 = halfway_index;
+    for (int32_t i = 0; i < sample_count_final; i++)
+    {
+        if (i % 2 == 0)
+        {
+            memcpy(interleaved_upsampled_audio_data_final + (i * bps), upsampled_audio_data_final + (deinterleaved_index0 * bps), bps);
+            deinterleaved_index0++;
+        }
+        else
+        {
+            memcpy(interleaved_upsampled_audio_data_final + (i * bps), upsampled_audio_data_final + (deinterleaved_index1 * bps), bps);
+            deinterleaved_index1++;
+        }
+    }
+
+    // Assign WAV info and data to song
+    song->audio_data = (byte_t*)malloc(sample_count_final * bps);
+    memcpy(song->audio_data, interleaved_upsampled_audio_data_final, sample_count_final * bps);
+    song->audio_data_size = sample_count_final * bps;
+    song->sample_rate = wav_header_packed->sample_rate;
+    song->channel_count = wav_header_packed->channel_count;
+    song->bits_per_sample = wav_header_packed->bits_per_sample;
+
+    free(interleaved_upsampled_audio_data_final);
+    free(upsampled_audio_data_final);
+    free(upsampled_audio_data_filtered);
+    free(upsampled_audio_data);
+    free(deinterleaved_wav_audio_data);
+#endif
 
     // Cleanxup
     free(wav_header_packed);

@@ -69,5 +69,4 @@ struct wav_t
 
 song_error_e WAVLoad(song_t* song);
 
-
 #endif WAV_H
