@@ -20,12 +20,21 @@
 
 #include <stdio.h>
 
-void ThreadCreate(LPTHREAD_START_ROUTINE thread_function, void* thread_function_data, HANDLE* thread_handle)
+void ThreadCreate(LPTHREAD_START_ROUTINE thread_function, void* thread_function_data, wchar_t* thread_name, HANDLE* thread_handle)
 {
+    // Create thread
     HANDLE handle = CreateThread(NULL, 0, thread_function, thread_function_data, 0, NULL);
     if (thread_handle == NULL)
     {
         printf("ERROR(%s:%i): Failed to create thread\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+
+    // Name thread
+    HRESULT hres = SetThreadDescription(handle, (PCWSTR)thread_name);
+    if (FAILED(hres))
+    {
+        printf("ERROR(%s:%i): Failed to name thread '%s'\n", __FILE__, __LINE__, thread_name);
         exit(EXIT_FAILURE);
     }
 

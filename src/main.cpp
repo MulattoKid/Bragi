@@ -49,6 +49,15 @@ extern uint8_t window_key_releases_index;
 
 int main(int argc, char** argv)
 {
+    // Name main thread
+    wchar_t thread_main_name[] = L"bragi_main_thread";
+    HRESULT hres = SetThreadDescription(GetCurrentThread(), thread_main_name);
+    if (FAILED(hres))
+    {
+        printf("ERROR(%s:%i): Failed to name thread '%s'\n", __FILE__, __LINE__, thread_main_name);
+        exit(EXIT_FAILURE);
+    }
+
     ////////////////////////
     // Sound player setup //
     ////////////////////////
@@ -76,7 +85,8 @@ int main(int argc, char** argv)
     memset(sound_player_shared_data.error_message, 0, MAX_PATH);
     // Start sound player thread
     HANDLE sound_player_thread;
-    ThreadCreate(&SoundPlayerThreadProc, &sound_player_shared_data, &sound_player_thread);
+    wchar_t thread_sound_player_name[] = L"bragi_sound_thread";
+    ThreadCreate(&SoundPlayerThreadProc, &sound_player_shared_data, thread_sound_player_name, &sound_player_thread);
 
 
 
