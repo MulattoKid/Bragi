@@ -7,6 +7,11 @@
 - Add more audio visualizations
     - Some kind of flow
 - Slow down songs during playback
+    - ~~Perform sample-rate conversion during loading on WAV files~~
+    - Perform sample-rate conversion on all formats
+- Support not loading entire sound files into memory
+    - Load a part of the sound file, and upon finish playback load more (probably want to thread this)
+    - Ensure this works with the sample-rate conversion
 - Support fullscreen-exclusive, fullscreen-borderless, almost-fullscreen-borderless
 
 # DONE

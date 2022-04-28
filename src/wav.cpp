@@ -129,7 +129,7 @@ song_error_e WAVLoad(song_t* song)
         }
     }
     // Perform sample-rate conversion
-    float slow_down_factor = 0.9f;
+    float slow_down_factor = 0.8f;
     float resampling_factor = (1.0f - slow_down_factor) + 1.0f;
     assert(slow_down_factor < 1.0f);
     assert(resampling_factor >= 1.0f);
@@ -148,8 +148,9 @@ song_error_e WAVLoad(song_t* song)
     }
     int32_t L = final_rate / a; // Upsampling factor
     int32_t M = input_rate / a; // Decimation factor
-    // Upsample by zero-stuffing
     int32_t sample_count_upsampled = sample_count * (L + 1);
+    int32_t sample_count_final = sample_count_upsampled / M;
+    // Upsample by zero-stuffing
     byte_t* upsampled_audio_data = (byte_t*)malloc(sample_count_upsampled * bps);
     memset(upsampled_audio_data, 0, sample_count_upsampled * bps);
     for (int32_t i = 0; i < sample_count; i++)
@@ -163,7 +164,7 @@ song_error_e WAVLoad(song_t* song)
     int32_t filter_sample_rate = input_rate * (L + 1);
     float filter_sample_delta = 1.0f / (float)filter_sample_rate;
     float cutoff_freq = wav_header_packed->sample_rate / 2;
-    float hamming_constant = 0.53836f;
+    const float hamming_constant = 0.53836f;
     float filter[filter_length];
     float filter_sum = 0.0f;
     for (int32_t i = 0; i < filter_length; i++)
@@ -192,14 +193,14 @@ song_error_e WAVLoad(song_t* song)
     {
         float filtered_sample = 0.0f;
         int32_t filter_length_for_sample = min(filter_length, sample_count_upsampled - i);
-        for (int32_t j = 0; j < filter_length_for_sample; j++)
+        int32_t j_offset = (L + 1) - (i % (L + 1));
+        for (int32_t j = j_offset; j < filter_length_for_sample; j += (L + 1))
         {
             filtered_sample += (float)((int16_t*)upsampled_audio_data)[i + j] * filter[j];
         }
         ((int16_t*)upsampled_audio_data_filtered)[i] = filtered_sample;
     }
     // Decimate
-    int32_t sample_count_final = sample_count_upsampled / M;
     byte_t* upsampled_audio_data_final = (byte_t*)malloc(sample_count_final * bps);
     for (int32_t i = 0; i < sample_count_final; i++)
     {
