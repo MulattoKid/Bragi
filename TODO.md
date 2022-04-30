@@ -7,6 +7,7 @@
 - Add more audio visualizations
     - Some kind of flow
     - https://twitter.com/XorDev/status/1520074812634320902
+        - https://www.shadertoy.com/view/stffRs
 - Slow down songs during playback
     - ~~Perform sample-rate conversion during loading on WAV files~~
     - Perform sample-rate conversion on all supported formats
