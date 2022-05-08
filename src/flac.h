@@ -42,6 +42,6 @@
  *  - SUBFRAME_CONSTANT or SUBFRAME_FIXED or SUBFRAME_LPC or SUBFRAME_VERBATIM
  * 
 */
-song_error_e FLACLoad(song_t* song);
+//song_error_e FLACLoad(song_t* song);
 
 #endif

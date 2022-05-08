@@ -21,6 +21,7 @@
 
 #include "macros.h"
 #include "song.h"
+#include "windows_audio.h"
 
 #include <stdint.h>
 
@@ -61,12 +62,12 @@ struct wav_t
     byte_t* audio_data;
     int32_t audio_data_size;
     int32_t sample_rate;
-    int32_t bytes_per_second; // sample_rate * channel_count * (bits_per_sample / 8) = bytes_per_second
     int16_t channel_count;
-    int16_t bits_per_sample; // One sample per channel
-    int16_t bytes_per_sample_all_channels; // channel_count * (bits_per_sample / 8)
+    uint8_t bps; // Bytes per sample
 };
 
-song_error_e WAVLoad(song_t* song);
+//song_error_e WAVLoad(song_t* song);
+song_error_e WAVLoadHeader(song_t* song);
+uint32_t     WAVLoadData(audio_thread_shared_data_t* audio_thread_data, uint64_t output_size, byte_t* output);
 
 #endif WAV_H

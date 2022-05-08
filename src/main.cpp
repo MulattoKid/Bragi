@@ -58,36 +58,6 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
 
-    ////////////////////////
-    // Sound player setup //
-    ////////////////////////
-    // Data
-    char sound_player_command_string[MAX_PATH];
-    sound_player_command_string[0] = '_';
-    sound_player_command_string[1] = '\0';
-    uint16_t sound_player_command_string_index = 0;
-    uint16_t sound_player_command_string_length = 1; // Including '_'
-    // Set up shared data to sound player
-    sound_player_shared_data_t sound_player_shared_data;
-    sound_player_shared_data.mutex = CreateMutexA(NULL, FALSE, "SharedDataMutex");
-    assert(sound_player_shared_data.mutex != NULL);
-    sound_player_shared_data.audio_device = NULL;
-    sound_player_shared_data.song = NULL;
-    sound_player_shared_data.next_operation_changed_event = CreateEventA(NULL, FALSE, FALSE, "SharedDataOperationChangedEvent");
-    assert(sound_player_shared_data.next_operation_changed_event != NULL);
-    sound_player_shared_data.next_operation = SOUND_PLAYER_OP_READY;
-    sound_player_shared_data.loop_state = SOUND_PLAYER_LOOP_NO;
-    sound_player_shared_data.shuffle_state = SOUND_PLAYER_SHUFFLE_NO;
-    sound_player_shared_data.playlist_current_changed = false;
-    sound_player_shared_data.error_message_changed = false;
-    memset(sound_player_shared_data.playlist_next_file_path, 0, MAX_PATH);
-    memset(sound_player_shared_data.playlist_current_file_path, 0, MAX_PATH);
-    memset(sound_player_shared_data.error_message, 0, MAX_PATH);
-    // Start sound player thread
-    HANDLE sound_player_thread;
-    wchar_t thread_sound_player_name[] = L"bragi_sound_thread";
-    ThreadCreate(&SoundPlayerThreadProc, &sound_player_shared_data, thread_sound_player_name, &sound_player_thread);
-
 
 
 
@@ -109,20 +79,23 @@ int main(int argc, char** argv)
     // Init Vulkan
     vulkan_context_t vulkan;
     VulkanInit(instance, window, &vulkan);
+    uint32_t frame_number = 0;
 
 
 
 
-    /////////////////
+    //////////////
     // Settings //
-    /////////////////
+    //////////////
     bool ui_command_line_showing = false;
     bool viz_enabled = true;
 
 
 
 
-    // DFT data
+    //////////////
+    // DFT DATA //
+    //////////////
     DWORD dft_previous_frame_sample_position = 0;
     DWORD dft_current_frame_sample_position = 0;
     // DFT buffers
@@ -144,6 +117,12 @@ int main(int argc, char** argv)
         sprintf(vulkan.vulkan_object_name + 26, "%u", i);
         VulkanSetObjectName(&vulkan, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)dft_storage_buffer_memories[i], vulkan.vulkan_object_name);
     }
+    HANDLE dft_current_playback_buffer_shared_shared_mutex = CreateMutexA(NULL, FALSE, "CurrentPlaybackBufferMutex");
+    uint64_t dft_current_playback_buffer_shared_size = 8192 * 2; // Same as audio_buffer_size * 2 to have room for a sample-rate converted version of the audio data
+    byte_t* dft_current_playback_buffer_shared = (byte_t*)malloc(dft_current_playback_buffer_shared_size);
+    uint64_t dft_current_playback_buffer_local_size = 0;
+    byte_t* dft_current_playback_buffer_local = (byte_t*)malloc(dft_current_playback_buffer_shared_size);
+
 
     // Initialize scenes
     SceneColumnsInit(&vulkan, dft_storage_buffers);
@@ -169,12 +148,51 @@ int main(int argc, char** argv)
     memset(sound_player_song_info, 0, MAX_PATH);
     uint16_t sound_player_song_sample_rate = 0;
     uint8_t sound_player_song_channel_count = 0;
-    uint8_t sound_player_song_bits_per_sample = 0;
+    uint8_t sound_player_song_bps = 0; // Bytes per sample
     // The largest audio format we support is two-channel 16-bit per sample
     byte* dft_audio_data = (byte*)malloc(DFT_MAX_WINDOWS * DFT_N * 2 * sizeof(int16_t));
     uint32_t audio_data_size = 0;
-    int16_t audio_data_bits_per_sample = 0;
+    int16_t audio_data_bps = 0; // Bytes per sample
     int16_t audio_data_bytes_per_sample_all_channels = 0;
+
+
+
+
+    ////////////////////////
+    // Sound player setup //
+    ////////////////////////
+    // Data
+    char sound_player_command_string[MAX_PATH];
+    sound_player_command_string[0] = '_';
+    sound_player_command_string[1] = '\0';
+    uint16_t sound_player_command_string_index = 0;
+    uint16_t sound_player_command_string_length = 1; // Including '_'
+    // Set up shared data to sound player
+    sound_player_shared_data_t sound_player_shared_data;
+    sound_player_shared_data.mutex = CreateMutexA(NULL, FALSE, "SharedDataMutex");
+    assert(sound_player_shared_data.mutex != NULL);
+    sound_player_shared_data.audio_device = NULL;
+    sound_player_shared_data.current_playback_buffer_mutex = dft_current_playback_buffer_shared_shared_mutex;
+    sound_player_shared_data.current_playback_buffer = dft_current_playback_buffer_shared;
+    sound_player_shared_data.current_playback_buffer_size = 0;
+    sound_player_shared_data.song = NULL;
+    sound_player_shared_data.next_operation_changed_event = CreateEventA(NULL, FALSE, FALSE, "SharedDataOperationChangedEvent");
+    assert(sound_player_shared_data.next_operation_changed_event != NULL);
+    sound_player_shared_data.next_operation = SOUND_PLAYER_OP_READY;
+    sound_player_shared_data.loop_state = SOUND_PLAYER_LOOP_NO;
+    sound_player_shared_data.shuffle_state = SOUND_PLAYER_SHUFFLE_NO;
+    sound_player_shared_data.playlist_current_changed = false;
+    sound_player_shared_data.error_message_changed = false;
+    memset(sound_player_shared_data.playlist_next_file_path, 0, MAX_PATH);
+    memset(sound_player_shared_data.playlist_current_file_path, 0, MAX_PATH);
+    memset(sound_player_shared_data.error_message, 0, MAX_PATH);
+    // Start sound player thread
+    HANDLE sound_player_thread;
+    wchar_t thread_sound_player_name[] = L"bragi_sound_thread";
+    ThreadCreate(&SoundPlayerThreadProc, &sound_player_shared_data, thread_sound_player_name, &sound_player_thread);
+
+
+
 
     // Loop
     //  1) Handle window input
@@ -184,8 +202,6 @@ int main(int argc, char** argv)
     //  5) Build command buffer using frame-in-flight's resources
     //  6) Submit command buffer (wait for step 3 to actually acquire swapchain image)
     //  7) Present frame's image (wait for step 6 to finish rendering the frame)
-    //
-    uint32_t frame_number = 0;
     while (1)
     {
         // Reset data
@@ -195,8 +211,9 @@ int main(int argc, char** argv)
         sound_player_loop_state_changed = false;
         sound_player_shuffle_state_changed = false;
         audio_data_size = 0;
-        audio_data_bits_per_sample = 0;
+        audio_data_bps = 0;
         audio_data_bytes_per_sample_all_channels = 0;
+        dft_current_playback_buffer_local_size = 0;
 
         // 1)
         // Have a look in the OS message queue, and if there's a message:
@@ -535,7 +552,7 @@ reset_sound_player_command:
             strcpy(sound_player_album_playing, sound_player_shared_data.song->album);
             sound_player_song_channel_count = sound_player_shared_data.song->channel_count;
             sound_player_song_sample_rate = sound_player_shared_data.song->sample_rate;
-            sound_player_song_bits_per_sample = sound_player_shared_data.song->bits_per_sample;
+            sound_player_song_bps = sound_player_shared_data.song->bps;
         }
 
         // Store string for error message if changed from sound player
@@ -590,45 +607,29 @@ reset_sound_player_command:
                 }
             }
         }
+        // Finished accessing shared data
+        SyncReleaseMutex(sound_player_shared_data.mutex, __FILE__, __LINE__);
+
         // Get and store samples to be used for DFT from sound player
         if ((viz_enabled == true) &&
             (sound_player_shared_data.audio_device != NULL))
         {
-            MMTIME playback_position;
-            playback_position.wType = TIME_SAMPLES;
-            AudioGetPlaybackPosition(sound_player_shared_data.audio_device, &playback_position);
-            // TODO (Daniel): support if the type of data changes
-            assert(playback_position.wType == TIME_SAMPLES);
-            dft_previous_frame_sample_position = dft_current_frame_sample_position;
-            dft_current_frame_sample_position = playback_position.u.sample;
-
-            // Playback has started
-            if (dft_current_frame_sample_position > 0)
+            DWORD mutex_locked = SyncTryLockMutex(dft_current_playback_buffer_shared_shared_mutex, 0, __FILE__, __LINE__);
+            if (mutex_locked == WAIT_OBJECT_0)
             {
-                // Ensure we don't compute the DFT on too many sampels (e.g. if we tab out and back in after a while)
-                // Current maximum is two sample windwos (DFT_N * 2)
-                if ((dft_current_frame_sample_position - dft_previous_frame_sample_position) > (DFT_MAX_WINDOWS * DFT_N))
-                {
-                    dft_previous_frame_sample_position = dft_current_frame_sample_position - (DFT_MAX_WINDOWS * DFT_N);
-                }
-                byte* audio_data_start = sound_player_shared_data.song->audio_data + (dft_previous_frame_sample_position * (sound_player_shared_data.song->channel_count * sound_player_shared_data.song->bits_per_sample) / 8);
-                byte* audio_data_end = sound_player_shared_data.song->audio_data + (dft_current_frame_sample_position * (sound_player_shared_data.song->channel_count * sound_player_shared_data.song->bits_per_sample) / 8);
-                audio_data_size = audio_data_end - audio_data_start;
-                audio_data_bits_per_sample = sound_player_shared_data.song->bits_per_sample;
-                audio_data_bytes_per_sample_all_channels = (sound_player_shared_data.song->channel_count * sound_player_shared_data.song->bits_per_sample) / 8;
-                memcpy(dft_audio_data, audio_data_start, audio_data_size);
+                assert(dft_current_playback_buffer_shared_size >= sound_player_shared_data.current_playback_buffer_size); // Just check that we have enough space
+                dft_current_playback_buffer_local_size = sound_player_shared_data.current_playback_buffer_size;
+                memcpy(dft_current_playback_buffer_local, dft_current_playback_buffer_shared, dft_current_playback_buffer_local_size);
+                SyncReleaseMutex(dft_current_playback_buffer_shared_shared_mutex, __FILE__, __LINE__);
             }
         }
-        // Finished accessing shared data
-        SyncReleaseMutex(sound_player_shared_data.mutex, __FILE__, __LINE__);
-
         // Potentially compute DFT
         if ((viz_enabled == true) &&
-            (audio_data_size > 0))
+            (dft_current_playback_buffer_local_size > 0))
         {
             float* dft_bands = NULL;
             VK_CHECK_RES(vkMapMemory(vulkan.device, dft_storage_buffer_memories[frame_resource_index], 0, VK_WHOLE_SIZE, 0, (void**)&dft_bands));
-            DFTCompute(dft_audio_data, dft_current_frame_sample_position - dft_previous_frame_sample_position, audio_data_bits_per_sample, audio_data_bytes_per_sample_all_channels, dft_bands);
+            DFTCompute(dft_current_playback_buffer_local, dft_current_playback_buffer_local_size / sound_player_shared_data.song->bps / sound_player_shared_data.song->channel_count, sound_player_shared_data.song->bps, sound_player_shared_data.song->channel_count * sound_player_shared_data.song->bps, dft_bands);
             vkUnmapMemory(vulkan.device, dft_storage_buffer_memories[frame_resource_index]);
         }
 
@@ -675,7 +676,7 @@ reset_sound_player_command:
         SceneUIUpdateInfoMessage(sound_player_album_playing, INFO_SECTION_ROW_ALBUM);
         SceneUIUpdateInfoMessage(_itoa(sound_player_song_channel_count, sound_player_song_info, 10), INFO_SECTION_ROW_CHANNEL_COUNT);
         SceneUIUpdateInfoMessage(_itoa(sound_player_song_sample_rate, sound_player_song_info, 10), INFO_SECTION_ROW_SAMPLE_RATE);
-        SceneUIUpdateInfoMessage(_itoa(sound_player_song_bits_per_sample, sound_player_song_info, 10), INFO_SECTION_ROW_BITS_PER_SAMPLE);
+        SceneUIUpdateInfoMessage(_itoa(sound_player_song_bps * 8, sound_player_song_info, 10), INFO_SECTION_ROW_BITS_PER_SAMPLE);
 
         // 5)
         // Begin

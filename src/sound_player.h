@@ -51,10 +51,8 @@ enum sound_player_shuffle_e
 // TODO (Daniel): pack properly
 struct sound_player_shared_data_t
 {
-    HANDLE next_operation_changed_event;
-    HANDLE mutex;
-    
-    // Above mutex must be acquired before accessing below members
+    HANDLE                   next_operation_changed_event;
+    HANDLE                   mutex; // Required to be locked before accessing below members
     song_t*                  song;
     HWAVEOUT                 audio_device;
     sound_player_operation_e next_operation;
@@ -65,6 +63,27 @@ struct sound_player_shared_data_t
     char                     playlist_next_file_path[MAX_PATH];
     char                     playlist_current_file_path[MAX_PATH];
     char                     error_message[MAX_PATH];
+
+    HANDLE                   current_playback_buffer_mutex; // Required to be locked before accessing below members
+    byte_t*                  current_playback_buffer;
+    uint64_t                 current_playback_buffer_size;
+};
+
+struct audio_thread_shared_data_t
+{
+    HANDLE                    sound_player_event;
+    HANDLE                    sound_player_mutex; // Required to be locked before accessing below members
+    sound_player_operation_e* sound_player_op;
+    HWAVEOUT                  audio_device;
+    FILE*                     file;
+    uint64_t                  file_size;
+    uint32_t                  sample_rate;
+    uint8_t                   channel_count;
+    uint8_t                   bps; // Bytes per sample
+
+    HANDLE                    current_playback_buffer_mutex; // Required to be locked before accessing below members
+    byte_t*                   current_playback_buffer;
+    uint64_t*                 current_playback_buffer_size;
 };
 
 void CALLBACK waveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2);

@@ -18,6 +18,7 @@
 
 #include "windows_thread.h"
 
+#include <assert.h>
 #include <stdio.h>
 
 void ThreadCreate(LPTHREAD_START_ROUTINE thread_function, void* thread_function_data, wchar_t* thread_name, HANDLE* thread_handle)
@@ -39,4 +40,15 @@ void ThreadCreate(LPTHREAD_START_ROUTINE thread_function, void* thread_function_
     }
 
     *thread_handle = handle;
+}
+
+void ThreadDestroy(HANDLE thread, DWORD exit_code)
+{
+    assert(thread != NULL);
+    BOOL res = TerminateThread(thread, exit_code);
+    if (res == 0)
+    {
+        printf("ERROR(%s:%i): Failed to destroy thread\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
 }

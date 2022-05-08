@@ -30,6 +30,18 @@ void SyncLockMutex(HANDLE mutex, DWORD wait_time_ms, const char* calle_file, int
     }
 }
 
+DWORD SyncTryLockMutex(HANDLE mutex, DWORD wait_time_ms, const char* calle_file, int calle_line_number)
+{
+    DWORD res = WaitForSingleObject(mutex, wait_time_ms);
+    if ((res == WAIT_ABANDONED) ||
+        (res == WAIT_FAILED))
+    {
+        printf("%s:%i Failed to wait on Mutex\n", calle_file, calle_line_number);
+        exit(EXIT_FAILURE);
+    }
+    return res;
+}
+
 void SyncReleaseMutex(HANDLE mutex, const char* calle_file, int calle_line_number)
 {
     BOOL res = ReleaseMutex(mutex);

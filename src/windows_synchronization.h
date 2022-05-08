@@ -22,6 +22,7 @@
 #include <windows.h>
 
 void SyncLockMutex(HANDLE mutex, DWORD wait_time_ms, const char* calle_file, int calle_line_number);
+DWORD SyncTryLockMutex(HANDLE mutex, DWORD wait_time_ms, const char* calle_file, int calle_line_number);
 void SyncReleaseMutex(HANDLE mutex, const char* calle_file, int calle_line_number);
 void SyncSetEvent(HANDLE event, const char* calle_file, int calle_line_number);
 void SyncWaitOnEvent(HANDLE event, DWORD wait_time_ms, const char* calle_file, int calle_line_number);

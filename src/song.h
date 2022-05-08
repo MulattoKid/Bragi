@@ -22,6 +22,7 @@
 #include "macros.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <windows.h>
 
 enum song_error_e
@@ -45,12 +46,14 @@ struct song_t
     char artist[MAX_PATH];
     char album[MAX_PATH];
     char* song_path_offset; // Not allocated, just an offset into an array
-    byte_t* audio_data;
+    //byte_t* audio_data;
+    FILE* file;
+    uint64_t file_size;
     uint64_t audio_data_size;
     song_type_e song_type;
     uint16_t sample_rate;
     uint8_t channel_count;
-    uint8_t bits_per_sample;
+    uint8_t bps; // Bytes per sample
 };
 
 void SongInit(song_t* song);

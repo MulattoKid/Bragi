@@ -28,19 +28,20 @@ void SongInit(song_t* song)
     strcpy(song->artist, "ARTIST NAME");
     strcpy(song->album, "ALBUM NAME");
     song->song_path_offset = NULL;
-    song->audio_data = NULL;
+    //song->audio_data = NULL;
+    song->file = NULL;
     song->audio_data_size = 0;
     song->song_type = SONG_TYPE_INVALID;
     song->sample_rate = 0;
     song->channel_count = 0;
-    song->bits_per_sample = 0;
+    song->bps = 0;
 }
 
 void SongFreeAudioData(song_t* song)
 {
     assert(song != NULL);
-    assert(song->audio_data != NULL);
+    assert(song->file != NULL);
     
-    free(song->audio_data);
-    song->audio_data = NULL;
+    fclose(song->file);
+    song->file = NULL;
 }

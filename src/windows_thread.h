@@ -22,5 +22,6 @@
 #include <windows.h>
 
 void ThreadCreate(LPTHREAD_START_ROUTINE thread_function, void* thread_function_data, wchar_t* thread_name, HANDLE* thread_handle);
+void ThreadDestroy(HANDLE thread, DWORD exit_code);
 
 #endif

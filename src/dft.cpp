@@ -35,17 +35,17 @@ void DFTCompute(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequen
     memset(dft_imaginary, 0, DFT_N * sizeof(float));
 
     // Offsets into actual audio data
-    byte* audio_data_start = wav->audio_data + (sample_start * wav->bytes_per_sample_all_channels);
-    byte* audio_data_end = wav->audio_data + (sample_end * wav->bytes_per_sample_all_channels);
+    byte* audio_data_start = wav->audio_data + (sample_start * wav->bps * wav->channel_count);
+    byte* audio_data_end = wav->audio_data + (sample_end * wav->bps * wav->channel_count);
 
     const int32_t sample_count = (int32_t)sample_end - (int32_t)sample_start;
     const int32_t iteration_count = (sample_count + DFT_N - 1) / DFT_N; // Round up
     float sample_max_value;
-    if (wav->bits_per_sample == 8)
+    if (wav->bps == 1)
     {
         sample_max_value = (float)UINT8_MAX;
     }
-    else // wav->bits_per_sample == 16
+    else // wav->bps == 2
     {
         sample_max_value = (float)INT16_MAX;
     }
@@ -63,7 +63,7 @@ void DFTCompute(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequen
                 int32_t sample_index = (i * DFT_N) + n;
                 if (sample_index <= sample_count)
                 {
-                    int16_t* sample_left = (int16_t*)(audio_data_start + (n * wav->bytes_per_sample_all_channels));
+                    int16_t* sample_left = (int16_t*)(audio_data_start + (n * wav->bps * wav->channel_count));
                     int16_t* sample_right = sample_left + 1;
                     float sample_left_f = (float)*sample_left / sample_max_value;
                     float sample_right_f = (float)*sample_right / sample_max_value;
@@ -117,7 +117,7 @@ void DFTCompute(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequen
     }
 }
 
-void DFTCompute(byte* audio_data, int32_t sample_count, int16_t bits_per_sample, int16_t bytes_per_sample_all_channels, float* frequency_bands)
+void DFTCompute(byte* audio_data, int32_t sample_count, int16_t bps, int16_t bytes_per_sample_all_channels, float* frequency_bands)
 {
     static float dft_real[DFT_N];
     static float dft_imaginary[DFT_N];
@@ -127,11 +127,11 @@ void DFTCompute(byte* audio_data, int32_t sample_count, int16_t bits_per_sample,
     // Offsets into actual audio data
     const int32_t iteration_count = (sample_count + DFT_N - 1) / DFT_N; // Round up
     float sample_max_value;
-    if (bits_per_sample == 8)
+    if (bps == 1)
     {
         sample_max_value = (float)UINT8_MAX;
     }
-    else // bits_per_sample == 16
+    else // bps == 2
     {
         sample_max_value = (float)INT16_MAX;
     }
@@ -199,6 +199,7 @@ void DFTCompute(byte* audio_data, int32_t sample_count, int16_t bits_per_sample,
                 current_magnitude = magnitude;
             }
         }
+        current_magnitude = magnitude;
         frequency_bands[i - 1] = current_magnitude;
     }
 }

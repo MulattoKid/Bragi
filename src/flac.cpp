@@ -1289,7 +1289,7 @@ uint64_t FLACLoadSubframeLPC(byte_t* bytes, uint32_t bits_per_sample, uint32_t l
     return (bytes - bytes_start);
 }
 
-song_error_e FLACLoad(song_t* song)
+/*song_error_e FLACLoad(song_t* song)
 {
     // Load FLAC file into memory
     FILE* flac_file = fopen(song->song_path_offset, "rb");
@@ -1615,5 +1615,5 @@ song_error_e FLACLoad(song_t* song)
     free(wav_data);
 
     return SONG_ERROR_NO;
-}
+}*/
 

@@ -20,15 +20,16 @@
 #define WINDOWS_AUDIO_H
 
 #include "song.h"
+#include "sound_player.h"
 
 #include <windows.h>
 
-bool AudioDeviceSupportsPlayback(song_t* wav, LPWAVEOUTCAPS windows_audio_device_capabilities);
+bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_device_capabilities);
 void AudioOpen(LPHWAVEOUT device, LPCWAVEFORMATEX device_format, DWORD_PTR callback, DWORD_PTR shared_data);
-void AudioPlay(HWAVEOUT device, song_t* song, LPWAVEHDR header);
+void AudioPlay(HWAVEOUT device, song_t* song, LPTHREAD_START_ROUTINE thread_function, audio_thread_shared_data_t* audio_thread_data, wchar_t* thread_name, HANDLE* thread_handle);
 void AudioPause(HWAVEOUT device);
 void AudioResume(HWAVEOUT device);
 void AudioGetPlaybackPosition(HWAVEOUT device, LPMMTIME playback_position);
-void AudioClose(HANDLE mutex, LPHWAVEOUT device, LPWAVEHDR header);
+void AudioClose(HWAVEOUT device, HANDLE thread_handle, LPWAVEHDR headers, uint8_t header_count);
 
 #endif

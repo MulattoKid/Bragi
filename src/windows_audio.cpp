@@ -16,8 +16,9 @@
  * OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#include "windows_synchronization.h"
 #include "windows_audio.h"
+#include "windows_synchronization.h"
+#include "windows_thread.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -32,7 +33,7 @@ bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_devic
     // TODO (Daniel): currently only supportiong stereo playback
     assert(windows_audio_device_capabilities->wChannels == song->channel_count);
     if ((song->sample_rate == 11025) &&
-        (song->bits_per_sample == 8))
+        (song->bps == 1))
     {
         if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_1S08)
         {
@@ -44,7 +45,7 @@ bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_devic
         }
     }
     else if ((song->sample_rate == 11025) &&
-             (song->bits_per_sample == 16))
+             (song->bps == 2))
     {
         if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_1S16)
         {
@@ -56,7 +57,7 @@ bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_devic
         }
     }
     else if ((song->sample_rate == 22050) &&
-             (song->bits_per_sample == 8))
+             (song->bps == 1))
     {
         if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_2S08)
         {
@@ -68,7 +69,7 @@ bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_devic
         }
     }
     else if ((song->sample_rate == 22050) &&
-             (song->bits_per_sample == 16))
+             (song->bps == 2))
     {
         if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_2S16)
         {
@@ -80,7 +81,7 @@ bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_devic
         }
     }
     else if ((song->sample_rate == 44100) &&
-             (song->bits_per_sample == 8))
+             (song->bps == 1))
     {
         if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_44S08)
         {
@@ -92,7 +93,7 @@ bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_devic
         }
     }
     else if ((song->sample_rate == 44100) &&
-             (song->bits_per_sample == 16))
+             (song->bps == 2))
     {
         if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_44S16)
         {
@@ -104,7 +105,7 @@ bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_devic
         }
     }
     else if ((song->sample_rate == 48000) &&
-             (song->bits_per_sample == 8))
+             (song->bps == 1))
     {
         if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_48S08)
         {
@@ -116,7 +117,7 @@ bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_devic
         }
     }
     else if ((song->sample_rate == 48000) &&
-             (song->bits_per_sample == 16))
+             (song->bps == 2))
     {
         if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_48S16)
         {
@@ -141,32 +142,27 @@ void AudioOpen(LPHWAVEOUT device, LPCWAVEFORMATEX device_format, DWORD_PTR callb
     assert(res_mmresult == MMSYSERR_NOERROR);
 }
 
-/**
- * This function will
- *  1) Prepare the header
- *  2) Open the audio device
-*/
-void AudioPlay(HWAVEOUT device, song_t* song, LPWAVEHDR header)
+void AudioPlay(HWAVEOUT device, song_t* song, LPTHREAD_START_ROUTINE thread_function, audio_thread_shared_data_t* audio_thread_data, wchar_t* thread_name, HANDLE* thread_handle)
 {
     assert(device != NULL);
     assert(song != NULL);
-    assert(header != NULL);
+    assert(thread_function != NULL);
+    assert(audio_thread_data != NULL);
+    assert(thread_name != NULL);
+    assert(thread_handle != NULL);
 
-    header->lpData = (LPSTR)song->audio_data;
-    header->dwBufferLength = song->audio_data_size;
-    header->dwBytesRecorded = 0;
-    header->dwUser = NULL;
-    header->dwFlags = 0;
-    header->dwLoops = 0;
-    MMRESULT res_mmresult = waveOutPrepareHeader(device, header, sizeof(WAVEHDR));
-    assert(res_mmresult == MMSYSERR_NOERROR);
-    res_mmresult = waveOutWrite(device, header, sizeof(WAVEHDR));
-    assert(res_mmresult == MMSYSERR_NOERROR);
+    audio_thread_data->audio_device = device;
+    audio_thread_data->file = song->file;
+    audio_thread_data->file_size = song->file_size;
+    audio_thread_data->sample_rate = song->sample_rate;
+    audio_thread_data->bps = song->bps;
+    audio_thread_data->channel_count = song->channel_count;
+    ThreadCreate(thread_function, audio_thread_data, thread_name, thread_handle);
 }
 
 void AudioPause(HWAVEOUT device)
 {
-    assert(device);
+    assert(device != NULL);
 
     MMRESULT res_mmresult = waveOutPause(device);
     assert(res_mmresult == MMSYSERR_NOERROR);
@@ -174,7 +170,7 @@ void AudioPause(HWAVEOUT device)
 
 void AudioResume(HWAVEOUT device)
 {
-    assert(device);
+    assert(device != NULL);
 
     MMRESULT res_mmresult = waveOutRestart(device);
     assert(res_mmresult == MMSYSERR_NOERROR);
@@ -189,45 +185,25 @@ void AudioGetPlaybackPosition(HWAVEOUT device, LPMMTIME playback_position)
     assert(res_mmresult == MMSYSERR_NOERROR);
 }
 
-/**
- * This function will
- *  1) Stop playback
- *  2) Unprepare the header
- *  3) Close the audio device
- * Doing the first two steps is unnecessary if the device isn't playing anything,
- * but shouldn't be an issue.
-*/
-void AudioClose(HANDLE mutex, LPHWAVEOUT device, LPWAVEHDR header)
+void AudioClose(HWAVEOUT device, HANDLE thread_handle, LPWAVEHDR headers, uint8_t header_count)
 {
     assert(device != NULL);
-    assert(header != NULL);
-    
-    // Set the device to be NULL before releasing the mutex, so that other parts that might acquire the mutex
-    // will act as if the device is already closed (i.e. not use it)
-    HWAVEOUT audio_device_to_be_closed = *device;
-    *device = NULL;
+    assert(thread_handle != NULL);
 
-    // Release mutex before stopping playback
-    // Because we've set the shared data's audio device handle to be NULL before releasing the mutex,
-    // other threads that acquire the mutex and look at it will think it's not available, and act accordingly
-    // (even though the device is still playing and still open)
-    SyncReleaseMutex(mutex, __FILE__, __LINE__);
+    // Kill audio loader thread
+    ThreadDestroy(thread_handle, EXIT_SUCCESS);
 
-    // Stop playback
-    MMRESULT res_mmresult = waveOutReset(audio_device_to_be_closed);
-    assert(res_mmresult == MMSYSERR_NOERROR);
-    assert(header->lpData != NULL);
-
-    // Busy-wait for the callback to have finished handling the WOM_DONE message
-    // TODO (Daniel): should there be a Sleep(1) inside the while-loop?
-    while ((header->dwFlags & WHDR_DONE) != WHDR_DONE) {}
-    SyncLockMutex(mutex, INFINITE, __FILE__, __LINE__);
-
-    // Unprepare header
-    res_mmresult = waveOutUnprepareHeader(audio_device_to_be_closed, header, sizeof(WAVEHDR));
+    // Reset audio device
+    MMRESULT res_mmresult = waveOutReset(device);
     assert(res_mmresult == MMSYSERR_NOERROR);
 
-    // Close device
-    res_mmresult = waveOutClose(audio_device_to_be_closed);
+    // Wait for all headers to indicate the header is DONE
+    for (uint32_t i = 0; i < header_count; i++)
+    {
+        while (((headers[i].dwFlags & WHDR_DONE) != WHDR_DONE)) {}
+    }
+
+    // Close audio device
+    res_mmresult = waveOutClose(device);
     assert(res_mmresult == MMSYSERR_NOERROR);
 }
