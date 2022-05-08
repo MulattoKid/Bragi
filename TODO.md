@@ -6,13 +6,20 @@
 - Optimize DFT
 - Add more audio visualizations
     - Some kind of flow
+    - https://twitter.com/XorDev/status/1520074812634320902
+        - https://www.shadertoy.com/view/stffRs
 - Slow down songs during playback
     - ~~Perform sample-rate conversion during loading on WAV files~~
-    - Perform sample-rate conversion on all formats
+    - Perform sample-rate conversion on all supported formats
+    - Adjust slow down during playback after songs aren't loaded all at once into memory
 - Support not loading entire sound files into memory
     - Load a part of the sound file, and upon finish playback load more (probably want to thread this)
     - Ensure this works with the sample-rate conversion
 - Support fullscreen-exclusive, fullscreen-borderless, almost-fullscreen-borderless
+- Support audio formats
+    - WAV
+    - FLAC
+    - MPEG4 (M4A)
 
 # DONE
 - ~~Allow for disabling audio visualization~~
