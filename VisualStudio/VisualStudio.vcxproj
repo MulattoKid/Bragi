@@ -156,6 +156,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\audio.cpp" />
     <ClCompile Include="..\src\dft.cpp" />
     <ClCompile Include="..\src\flac.cpp" />
     <ClCompile Include="..\src\main.cpp" />
@@ -172,6 +173,7 @@
     <ClCompile Include="..\src\windows_window.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\audio.h" />
     <ClInclude Include="..\src\dft.h" />
     <ClInclude Include="..\src\flac.h" />
     <ClInclude Include="..\src\macros.h" />

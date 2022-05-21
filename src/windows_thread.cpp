@@ -45,6 +45,7 @@ void ThreadCreate(LPTHREAD_START_ROUTINE thread_function, void* thread_function_
 void ThreadDestroy(HANDLE thread, DWORD exit_code)
 {
     assert(thread != NULL);
+    
     BOOL res = TerminateThread(thread, exit_code);
     if (res == 0)
     {

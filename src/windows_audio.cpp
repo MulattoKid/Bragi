@@ -23,115 +23,23 @@
 #include <assert.h>
 #include <stdio.h>
 
-bool AudioDeviceSupportsPlayback(song_t* song, LPWAVEOUTCAPS windows_audio_device_capabilities)
+// https://docs.microsoft.com/en-us/windows/win32/multimedia/determining-nonstandard-format-support
+bool AudioDeviceSupportsPlayback(uint32_t sample_rate, uint8_t bps, uint8_t channel_count)
 {
-    assert(song != NULL);
-    assert(windows_audio_device_capabilities != NULL);
-
-    MMRESULT res = waveOutGetDevCaps(WAVE_MAPPER, windows_audio_device_capabilities, sizeof(WAVEOUTCAPS));
-    assert(res == MMSYSERR_NOERROR);
-    // TODO (Daniel): currently only supportiong stereo playback
-    assert(windows_audio_device_capabilities->wChannels == song->channel_count);
-    if ((song->sample_rate == 11025) &&
-        (song->bps == 1))
-    {
-        if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_1S08)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    else if ((song->sample_rate == 11025) &&
-             (song->bps == 2))
-    {
-        if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_1S16)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    else if ((song->sample_rate == 22050) &&
-             (song->bps == 1))
-    {
-        if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_2S08)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    else if ((song->sample_rate == 22050) &&
-             (song->bps == 2))
-    {
-        if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_2S16)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    else if ((song->sample_rate == 44100) &&
-             (song->bps == 1))
-    {
-        if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_44S08)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    else if ((song->sample_rate == 44100) &&
-             (song->bps == 2))
-    {
-        if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_44S16)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    else if ((song->sample_rate == 48000) &&
-             (song->bps == 1))
-    {
-        if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_48S08)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    else if ((song->sample_rate == 48000) &&
-             (song->bps == 2))
-    {
-        if (windows_audio_device_capabilities->dwFormats & WAVE_FORMAT_48S16)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    else
+    WAVEFORMATEX format;
+    format.wFormatTag = WAVE_FORMAT_PCM;
+    format.nChannels = channel_count;
+    format.nSamplesPerSec = sample_rate;
+    format.nAvgBytesPerSec = channel_count * sample_rate * bps;
+    format.nBlockAlign = channel_count * bps;
+    format.wBitsPerSample = bps * 8;
+    format.cbSize = 0; // Ignored so long as wFormatTag == WAVE_FORMAT_PCM or WAVE_FORMAT_IEEE_FLOAT
+    MMRESULT res = waveOutOpen(NULL, WAVE_MAPPER, &format, NULL, NULL, WAVE_FORMAT_QUERY);
+    if (res != MMSYSERR_NOERROR)
     {
         return false;
     }
+    return true;
 }
 
 void AudioOpen(LPHWAVEOUT device, LPCWAVEFORMATEX device_format, DWORD_PTR callback, DWORD_PTR shared_data)
@@ -140,24 +48,6 @@ void AudioOpen(LPHWAVEOUT device, LPCWAVEFORMATEX device_format, DWORD_PTR callb
 
     MMRESULT res_mmresult = waveOutOpen(device, WAVE_MAPPER, device_format, callback, shared_data, CALLBACK_FUNCTION);
     assert(res_mmresult == MMSYSERR_NOERROR);
-}
-
-void AudioPlay(HWAVEOUT device, song_t* song, LPTHREAD_START_ROUTINE thread_function, audio_thread_shared_data_t* audio_thread_data, wchar_t* thread_name, HANDLE* thread_handle)
-{
-    assert(device != NULL);
-    assert(song != NULL);
-    assert(thread_function != NULL);
-    assert(audio_thread_data != NULL);
-    assert(thread_name != NULL);
-    assert(thread_handle != NULL);
-
-    audio_thread_data->audio_device = device;
-    audio_thread_data->file = song->file;
-    audio_thread_data->file_size = song->file_size;
-    audio_thread_data->sample_rate = song->sample_rate;
-    audio_thread_data->bps = song->bps;
-    audio_thread_data->channel_count = song->channel_count;
-    ThreadCreate(thread_function, audio_thread_data, thread_name, thread_handle);
 }
 
 void AudioPause(HWAVEOUT device)
@@ -185,22 +75,39 @@ void AudioGetPlaybackPosition(HWAVEOUT device, LPMMTIME playback_position)
     assert(res_mmresult == MMSYSERR_NOERROR);
 }
 
-void AudioClose(HWAVEOUT device, HANDLE thread_handle, LPWAVEHDR headers, uint8_t header_count)
+void AudioClose(HWAVEOUT device, LPWAVEHDR headers, uint8_t header_count)
 {
     assert(device != NULL);
-    assert(thread_handle != NULL);
+    assert(headers != NULL);
+    assert(header_count > 0);
 
-    // Kill audio loader thread
-    ThreadDestroy(thread_handle, EXIT_SUCCESS);
+    MMRESULT res_mmresult;
 
     // Reset audio device
-    MMRESULT res_mmresult = waveOutReset(device);
+    res_mmresult = waveOutReset(device);
     assert(res_mmresult == MMSYSERR_NOERROR);
-
+    
     // Wait for all headers to indicate the header is DONE
     for (uint32_t i = 0; i < header_count; i++)
     {
-        while (((headers[i].dwFlags & WHDR_DONE) != WHDR_DONE)) {}
+        // TODO: remove - isn't really neccessary
+        // https://docs.microsoft.com/en-us/windows/win32/api/mmeapi/nf-mmeapi-waveoutreset
+        //    All pending playback buffers are marked as done (WHDR_DONE) and returned to the application.
+        while (1)
+        {
+            if (((headers[i].dwFlags & WHDR_DONE) == WHDR_DONE) ||
+                (headers[i].dwFlags == 0))
+            {
+                break;
+            }
+        }
+
+        // Unprepare any prepared headers
+        if ((headers[i].dwFlags & WHDR_PREPARED) == WHDR_PREPARED)
+        {
+            res_mmresult = waveOutUnprepareHeader(device, &headers[i], sizeof(WAVEHDR));
+            assert(res_mmresult == MMSYSERR_NOERROR);
+        }
     }
 
     // Close audio device

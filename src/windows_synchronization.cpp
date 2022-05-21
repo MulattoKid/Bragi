@@ -62,12 +62,22 @@ void SyncSetEvent(HANDLE event, const char* calle_file, int calle_line_number)
     }
 }
 
-void SyncWaitOnEvent(HANDLE even, DWORD wait_time_ms, const char* calle_file, int calle_line_number)
+void SyncWaitOnEvent(HANDLE event, DWORD wait_time_ms, const char* calle_file, int calle_line_number)
 {
-    DWORD res = WaitForSingleObject(even, wait_time_ms);
+    DWORD res = WaitForSingleObject(event, wait_time_ms);
     if (res != WAIT_OBJECT_0)
     {
         printf("%s:%i Failed to wait on Event\n", calle_file, calle_line_number);
+        exit(EXIT_FAILURE);
+    }
+}
+
+void SyncResetEvent(HANDLE event, const char* calle_file, int calle_line_number)
+{
+    BOOL res = ResetEvent(event);
+    if (res == 0)
+    {
+        printf("%s:%i Failed to reset Event\n", calle_file, calle_line_number);
         exit(EXIT_FAILURE);
     }
 }

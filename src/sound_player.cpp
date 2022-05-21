@@ -22,79 +22,10 @@
  * //////////////////////////
  * 
  * 
- * Shared Data
- * The sound player shares data with the main thread. Through this it will send and receive data to initiate
- * certain actions, and update various information.
- *  - Event: this is used to signal to the sound player that a new operation has occured, and that it must be
- *           handled approrpiately. This event can be set both from the main thread and the sound player's own
- *           callback function.
- *  - Mutex: this controls access to the shared data. It must always be locked before accessing the shared data
- *           (except the Event).
- *  - The rest are self-explanatory.
- * 
- * 
- * Callback
- * The callback is connected to a Windows audio device, and can be invoked in three instances: 1) the device was
- * opened, 2) the device was closed, or 3) it finished playback. We are only interested in the last one. When the
- * callback is invoked, and it was caused by playback finishing, it will check if the sound player is ready
- * to receive a new operation, and if it is, set the next operation to NEXT and signal the Event.
- * 
- * 
- * Operation
- * When the Event is signaled, it means that the sound player has recevied a new operation to perform (see the
- * sound_player_operation_e enum):
- *  - BUSY:     This means that the sound player is already busy with some other operation, and a new one cannot
- *              be set. The reason this is necessary is that when closing the audio device, the callback function
- *              will be invoked with WOM_DONE. For the callback to be able to correctly read the shared data, the
- *              mutex must be unlocked before the callback is invoked. When this happens, the main thread might
- *              also try locking the mutex and updating the next operation. This would be illegal, as an operation
- *              is already in progress. To avoid such a scenario, the BUSY operation is set, and if the main thread
- *              sees this operation as the one currently in progress, it will not alter the operation.
- *  - READY:    This means that the sound player is ready to receive a new operation, and is it's default state.
- *              operation.
- *  - PLAY:     This means that the sound player will start playing from a new playlist.
- *  - NEXT:     This means that the sound player will start playing the next song in the playlist. If the end of the
- *              playlist is reached, the loop-state determines what happens.
- *  - PREVIOUS: This means that the sound player will start playing the previous song in the playlist. If the start
- *              of the playlist is reached, the loop-state determines what happens.
- *  - PAUSE:    This means that playback of the current song will pause.
- *  - RESUME:   This means that playback of the current song will resume.
- *  - SHUFFLE:  This means that the current playlist will be (re-)shuffled.
- * 
- * PLaying a New Playlist
- * Playing a new playlist includes 5 steps:
- *  1) Try to load the playlist file.
- *   a) If this fails, the current playlist isn't updated, and no change is observed.
- *   b) If this succeeds, continue to step 2.
- * 2) Try loading the first song in the playlist.
- *  a) If this fails, the current playlist is still updated to the new playlist, but the current song being played
- *     (if any) continues playing.
- *  b) If this succeeds, continue to step 3.
- * 3) Check if the Windows audio device can play the file format.
- *  a) If this fails, the current playlist is still updated to the new playlist, but the current song being played
- *     (if any) continues playing.
- *  b) If this succeeds, continue to step 4.
- * 4) Stop playback of the current song if one is playing.
- * 5) Start playback of the first song in the playlist.
- * 
- * 
- * Playing the Next WAV File in a Playlist
- * Playing the next WAV file in a playlist consists of N steps:
- * 1) Select the next WAV file to be played. If the end of the playlist is reached, the loop-state determines what happens:
- *   a) LOOP_NO: playback stops.
- *   b) LOOP:    the playlist will restart.
- *    If LOOP_SINGLE is used, then the same WAV file will be reloaded and playback start from the beginning.
- * 2) Try loading the next WAV file.
- *   a) If this fails, the current song being played (if any) continues playing.
- *   b) If this succeeds, continue to step 3.
- * 3) Check if the Windows audio device can play the file format.
- *  a) If this fails, the current song being played (if any) continues playing.
- *  b) If this succeeds, continue to step 3.
- * 4) Stop playback of the current song if one is playing.
- * 5) Start playback of the next WAV file.
  * 
 */
 
+#include "audio.h"
 #include "flac.h"
 #include "playlist.h"
 #include "sound_player.h"
@@ -118,8 +49,7 @@ static uint8_t audio_buffer_index = 0;
 void CALLBACK waveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
     // Cast input pointer
-    sound_player_shared_data_t* shared_data = (sound_player_shared_data_t*)dwInstance;
-    assert(shared_data->mutex != NULL);
+    callback_data_t* callback_data = (callback_data_t*)dwInstance;
 
     // Handle message
     switch (uMsg)
@@ -130,7 +60,8 @@ void CALLBACK waveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, DWORD_P
 
         case WOM_DONE:
         {
-            SyncSetEvent(audio_event, __FILE__, __LINE__);
+            InterlockedIncrement((volatile LONG*)&callback_data->callback_count_atomic);
+            SyncSetEvent(callback_data->event, __FILE__, __LINE__);
         } break;
 
         default:
@@ -140,272 +71,18 @@ void CALLBACK waveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, DWORD_P
     }
 }
 
+static uint8_t filter_length = 64;
+static float* filter = NULL;
 static byte_t* prefetch_buffer = NULL;
 static byte_t* upsampled_audio_data = NULL;
-static byte_t* upsampled_audio_data_proper = NULL;
+static byte_t* upsampled_audio_data_with_prefetch_buffer = NULL;
 static byte_t* upsampled_audio_data_filtered = NULL;
-static byte_t** upsampled_audio_data_finals = NULL;
-static const uint8_t filter_length = 64;
-static const uint8_t filter_shift = filter_length / 2;
-static const float pi = 3.14159265359f;
-static const float hamming_constant = 0.53836f;
-static float filter[filter_length];
-static float slow_down_factor = 0.8f;
-static float resampling_factor = (1.0f - slow_down_factor) + 1.0f;
-DWORD WINAPI AudioThreadProc(_In_ LPVOID lpParameter)
-{
-    // Cast input pointer
-    audio_thread_shared_data_t* audio_thread_data = (audio_thread_shared_data_t*)lpParameter;
-    
-    // If audio_event already exists, recreate it
-    if (audio_event != NULL)
-    {
-        assert(CloseHandle(audio_event) != 0);
-    }
-    audio_event = CreateEventA(NULL, FALSE, FALSE, "AudioLoaderEvent");
-    // Check if any buffers already exists, and if so, free them
-    if (prefetch_buffer != NULL)
-    {
-        free(prefetch_buffer);
-    }
-    if (upsampled_audio_data != NULL)
-    {
-        free(upsampled_audio_data);
-    }
-    if (upsampled_audio_data_proper != NULL)
-    {
-        free(upsampled_audio_data_proper);
-    }
-    if (upsampled_audio_data_filtered != NULL)
-    {
-        free(upsampled_audio_data_filtered);
-    }
-    if (upsampled_audio_data_finals != NULL)
-    {
-        for (uint8_t i = 0; i < audio_buffer_count; i++)
-        {
-            free(upsampled_audio_data_finals[i]);
-        }
-        free(upsampled_audio_data_finals);
-    }
-
-    // Pre-compute some stuff needed for sample-rate conversion
-    const uint32_t input_rate = audio_thread_data->sample_rate;
-    const uint32_t final_rate = input_rate * resampling_factor;
-    // Find greatest common divisor
-    // https://en.wikipedia.org/wiki/Euclidean_algorithm#Implementations
-    uint32_t a = input_rate;
-    uint32_t b = final_rate;
-    while (b != 0)
-    {
-        int32_t t = b;
-        b = a % b;
-        a = t;
-    }
-    const uint32_t L = final_rate / a; // Upsampling factor
-    const uint32_t M = input_rate / a; // Decimation factor
-    const uint32_t bps = audio_thread_data->bps;
-    const uint32_t channel_count = audio_thread_data->channel_count;
-    const uint32_t bps_all_channels = bps * channel_count;
-    const uint32_t max_sample_count_in_audio_buffer = audio_buffer_size / bps_all_channels; // Ensure it fits all samples for a channel
-    const uint32_t max_sample_count_in_audio_buffer_all_channels = max_sample_count_in_audio_buffer * channel_count; // Scale up to get number of individual samples
-    const uint32_t max_sample_count_upsampled_all_channels = max_sample_count_in_audio_buffer_all_channels * L;
-    uint32_t max_sample_count_decimated_all_channels = (max_sample_count_upsampled_all_channels / M);
-    max_sample_count_decimated_all_channels -= (max_sample_count_decimated_all_channels % channel_count); // Ensure we can fit entire channels
-
-    // (Re)Allocate buffers
-    prefetch_buffer = (byte_t*)malloc(filter_length * audio_thread_data->channel_count * audio_thread_data->bps);
-    upsampled_audio_data = (byte_t*)malloc(max_sample_count_upsampled_all_channels * bps);
-    upsampled_audio_data_proper = (byte_t*)malloc((max_sample_count_upsampled_all_channels + (filter_length * audio_thread_data->channel_count)) * bps);
-    upsampled_audio_data_filtered = (byte_t*)malloc(max_sample_count_upsampled_all_channels * bps);
-    upsampled_audio_data_finals = (byte_t**)malloc(audio_buffer_count * sizeof(byte_t*));
-    for (uint8_t i = 0; i < audio_buffer_count; i++)
-    {
-        upsampled_audio_data_finals[i] = (byte_t*)malloc(max_sample_count_decimated_all_channels * bps);
-    }
-
-    // Preload first N-1 audio_buffers
-    audio_buffer_index = 0;
-    for (uint32_t i = 0; i < audio_buffer_count - 1; i++)
-    {
-        // Load audio data
-        audio_buffer_data_available_size[audio_buffer_index] = WAVLoadData(audio_thread_data, audio_buffer_size, audio_buffers[audio_buffer_index]);
-
-        // Ensure there's audio data
-        if (audio_buffer_data_available_size[audio_buffer_index] == 0)
-        {
-            assert(0); // Need to handle this
-        }
-
-        // Send audio data to audio device
-        audio_headers[audio_buffer_index].lpData = (LPSTR)audio_buffers[audio_buffer_index];
-        audio_headers[audio_buffer_index].dwBufferLength = audio_buffer_data_available_size[audio_buffer_index];
-        audio_headers[audio_buffer_index].dwBytesRecorded = 0;
-        audio_headers[audio_buffer_index].dwUser = NULL;
-        audio_headers[audio_buffer_index].dwFlags = 0;
-        audio_headers[audio_buffer_index].dwLoops = 0;
-        MMRESULT res_mmresult = waveOutPrepareHeader(audio_thread_data->audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
-        assert(res_mmresult == MMSYSERR_NOERROR);
-        res_mmresult = waveOutWrite(audio_thread_data->audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
-        assert(res_mmresult == MMSYSERR_NOERROR);
-        audio_buffer_index = (audio_buffer_index + 1) % audio_buffer_count;
-    }
-
-    // Load audio data into next audio_buffer, and wait
-    while (1)
-    {
-        // Load next chunk of audio file
-        audio_buffer_data_available_size[audio_buffer_index] = WAVLoadData(audio_thread_data, audio_buffer_size, audio_buffers[audio_buffer_index]);
-        if (audio_buffer_data_available_size[audio_buffer_index] == 0)
-        {
-            SyncLockMutex(audio_thread_data->sound_player_mutex, INFINITE, __FILE__, __LINE__);
-            *audio_thread_data->sound_player_op = SOUND_PLAYER_OP_NEXT;
-            SyncReleaseMutex(audio_thread_data->sound_player_mutex, __FILE__, __LINE__);
-            SyncSetEvent(audio_thread_data->sound_player_event, __FILE__, __LINE__);
-            return EXIT_SUCCESS;
-        }
-#if 1
-        // Perform sample-rate conversion
-        int32_t sample_count_all_channels = audio_buffer_data_available_size[audio_buffer_index] / bps;
-        int32_t sample_count = sample_count_all_channels / audio_thread_data->channel_count;
-        int32_t sample_count_upsampled = sample_count * L;
-        int32_t sample_count_upsampled_all_channels = sample_count_upsampled * audio_thread_data->channel_count;
-        assert(sample_count_upsampled_all_channels % 2 == 0);
-        int32_t sample_count_final = sample_count_upsampled / M;
-        int32_t sample_count_final_all_channels = sample_count_final * audio_thread_data->channel_count;
-        assert(sample_count_final_all_channels % 2 == 0);
-        // Upsample by zero-stuffing
-        memset(upsampled_audio_data, 0, sample_count_upsampled_all_channels * bps);
-        for (uint8_t channel = 0; channel < audio_thread_data->channel_count; channel++)
-        {
-            int32_t channel_offset = channel * bps;
-            for (int32_t i = 0; i < sample_count; i++)
-            {
-                int32_t tmp_src = (i * audio_thread_data->channel_count) + channel_offset;
-                int32_t tmp_dst = (i * audio_thread_data->channel_count * L) + channel_offset;
-                memcpy(upsampled_audio_data + (i * audio_thread_data->channel_count * L * bps) + channel_offset, audio_buffers[audio_buffer_index] + (i * audio_thread_data->channel_count * bps) + channel_offset, bps);
-            }
-        }
-        // Copy the filter_length samples in the prefetch buffer into the start of the actual buffer to be used for filtering
-        memcpy(upsampled_audio_data_proper, prefetch_buffer, filter_length * audio_thread_data->channel_count * bps);
-        // Copy the first N - filter_length samples into the actual buffer to be used for filtering at an offset
-        memcpy(upsampled_audio_data_proper + (filter_length * audio_thread_data->channel_count * bps), upsampled_audio_data, sample_count_upsampled_all_channels * bps);
-        // Copy the last filter_length samples into the prefetch buffer for the next iteration
-        memcpy(prefetch_buffer, upsampled_audio_data + (sample_count_upsampled_all_channels * bps) - (filter_length * audio_thread_data->channel_count * bps), filter_length * audio_thread_data->channel_count * bps);
-        // Create filter
-        int32_t filter_sample_rate = input_rate * L;
-        float filter_sample_delta = 1.0f / (float)filter_sample_rate;
-        float cutoff_freq = audio_thread_data->sample_rate / 2;
-        float filter_sum = 0.0f;
-        for (int32_t i = 0; i < filter_length; i++)
-        {
-            int32_t sample_index_shifted = i;
-            int32_t sample_index = i - filter_shift;
-            float sample_time = float(sample_index) * filter_sample_delta;
-
-            float sinc_value = 2.0f * cutoff_freq;
-            if (sample_index != 0)
-            {
-                sinc_value = sinf(2.0 * pi * cutoff_freq * sample_time) / (pi * sample_time);
-            }
-            float hamming_value = hamming_constant - ((1.0 - hamming_constant) * cosf((2.0 * pi * float(sample_index_shifted)) / float(filter_length - 1)));
-            filter[i] = sinc_value * hamming_value;
-            filter_sum += fabs(filter[i]);
-        }
-        // Normalize filter
-        for (int32_t i = 0; i < filter_length; i++)
-        {
-            filter[i] /= filter_sum;
-        }
-        // Filter
-        for (uint8_t channel = 0; channel < audio_thread_data->channel_count; channel++)
-        {
-            for (int32_t i = 0; i < sample_count_upsampled; i++)
-            {
-                float filtered_sample = 0.0f;
-                int32_t filter_length_for_sample = min(filter_length, sample_count_upsampled + filter_length - i);
-                assert(filter_length_for_sample == filter_length);
-                /*int32_t j_offset = L - (i % L);
-                for (int32_t j = j_offset; j < filter_length_for_sample; j += L)
-                {
-                    filtered_sample += (float)((int16_t*)upsampled_audio_data_proper)[current_sample_index + j] * filter[j];
-                }*/
-                // Don't optimize for now, since we don't know which index our first non-zero-stuffed value is in in our 'proper' upsampled buffer
-                for (int32_t j = 0; j < filter_length_for_sample; j++)
-                {
-                    int32_t tmp_src = (i * audio_thread_data->channel_count) + (j * audio_thread_data->channel_count) + channel;
-                    filtered_sample += (float)((int16_t*)upsampled_audio_data_proper)[(i * audio_thread_data->channel_count) + (j * audio_thread_data->channel_count) + channel] * filter[j];
-                }
-                ((int16_t*)upsampled_audio_data_filtered)[(i * audio_thread_data->channel_count) + channel] = filtered_sample;
-            }
-        }
-        // Decimate
-        for (uint8_t channel = 0; channel < audio_thread_data->channel_count; channel++)
-        {
-            int32_t channel_offset_src = sample_count_upsampled * channel;
-            int32_t channel_offset_dst = sample_count_final * channel;
-            for (int32_t i = 0; i < sample_count_final; i++)
-            {
-                int32_t tmp_src = (i * M * audio_thread_data->channel_count) + channel;
-                int32_t tmp_dst = (i * audio_thread_data->channel_count) + channel;
-                ((int16_t*)upsampled_audio_data_finals[audio_buffer_index])[(i * audio_thread_data->channel_count) + channel] = ((int16_t*)upsampled_audio_data_filtered)[(i * M * audio_thread_data->channel_count) + channel];
-            }
-        }
-        // Send audio data to audio device
-        audio_headers[audio_buffer_index].lpData = (LPSTR)upsampled_audio_data_finals[audio_buffer_index];
-        audio_headers[audio_buffer_index].dwBufferLength = sample_count_final_all_channels * bps;
-        audio_headers[audio_buffer_index].dwBytesRecorded = 0;
-        audio_headers[audio_buffer_index].dwUser = NULL;
-        audio_headers[audio_buffer_index].dwFlags = 0;
-        audio_headers[audio_buffer_index].dwLoops = 0;
-#else
-        // Send audio data to audio device
-        audio_headers[audio_buffer_index].lpData = (LPSTR)audio_buffers[audio_buffer_index];
-        audio_headers[audio_buffer_index].dwBufferLength = audio_buffer_data_available_size[audio_buffer_index];
-        audio_headers[audio_buffer_index].dwBytesRecorded = 0;
-        audio_headers[audio_buffer_index].dwUser = NULL;
-        audio_headers[audio_buffer_index].dwFlags = 0;
-        audio_headers[audio_buffer_index].dwLoops = 0;
-#endif
-        MMRESULT res_mmresult = waveOutPrepareHeader(audio_thread_data->audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
-        assert(res_mmresult == MMSYSERR_NOERROR);
-        res_mmresult = waveOutWrite(audio_thread_data->audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
-        assert(res_mmresult == MMSYSERR_NOERROR);
-        audio_buffer_index = (audio_buffer_index + 1) % audio_buffer_count;
-
-        // Wait for callback indicating an audio_buffer finished playback
-        SyncWaitOnEvent(audio_event, INFINITE, __FILE__, __LINE__);
-
-        // Unprepare header
-        res_mmresult = waveOutUnprepareHeader(audio_thread_data->audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
-        assert(res_mmresult == MMSYSERR_NOERROR);
-
-        // Update playback buffer
-        SyncLockMutex(audio_thread_data->current_playback_buffer_mutex, INFINITE, __FILE__, __LINE__);
-        uint8_t audio_buffer_index_next = (audio_buffer_index + 1) % audio_buffer_count;
-        memcpy(audio_thread_data->current_playback_buffer, audio_buffers[audio_buffer_index_next], audio_buffer_data_available_size[audio_buffer_index_next]);
-        *audio_thread_data->current_playback_buffer_size = audio_buffer_data_available_size[audio_buffer_index_next];
-        SyncReleaseMutex(audio_thread_data->current_playback_buffer_mutex, __FILE__, __LINE__);
-    }
-
-    return EXIT_SUCCESS;
-}
-
+static byte_t* upsampled_audio_data_finals[audio_buffer_count];
+static float slow_down_factor = 1.0f;//0.8f;
 DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
 {
     // Cast input pointer
     sound_player_shared_data_t* shared_data = (sound_player_shared_data_t*)lpParameter;
-    
-    // Audio thread
-    HANDLE audio_thread = NULL;
-    wchar_t audio_thread_name[] = L"bragi_audio_thread";
-    audio_thread_shared_data_t audio_thread_data;
-    audio_thread_data.sound_player_event = shared_data->next_operation_changed_event;
-    audio_thread_data.sound_player_mutex = shared_data->mutex;
-    audio_thread_data.sound_player_op = &shared_data->next_operation;
-    audio_thread_data.current_playback_buffer_mutex = shared_data->current_playback_buffer_mutex;
-    audio_thread_data.current_playback_buffer = shared_data->current_playback_buffer;
-    audio_thread_data.current_playback_buffer_size = &shared_data->current_playback_buffer_size;
     
     // Windows audio device data
     HWAVEOUT* windows_audio_device = &shared_data->audio_device;
@@ -423,206 +100,228 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
     // Two songs to keep track of currently playing song, and next song to be played
     shared_data->song = NULL;
 
-    // Local copies of shared data
-    sound_player_operation_e next_operation;
+    // Data about current song for sample-rate conversion
+    uint32_t input_rate;
+    float resampling_factor;
+    uint32_t output_rate;
+    uint32_t gcd;
+    uint32_t L; // Upsampling factor
+    uint32_t M; // Decimation factor
+    uint32_t bps;
+    uint32_t channel_count;
+    uint32_t bps_all_channels;
+    uint32_t max_sample_count_in_audio_buffer;
+    uint32_t max_sample_count_in_audio_buffer_all_channels;
+    uint32_t max_sample_count_upsampled_all_channels;
+    uint32_t max_sample_count_decimated_all_channels;
+
+    // Playback data about current song
+    playback_data_t playback_data;
+
+    // Callback data
+    callback_data_t callback_data;
+    callback_data.event = shared_data->event;
+    callback_data.callback_count_atomic = 0;
+    sound_player_operation_e sound_player_next_operation = SOUND_PLAYER_OP_READY;
 
     // Loop
     while (1)
     {
-        // Wait for sound player operation to change (can happen from either callback function or the main thread)
-        SyncWaitOnEvent(shared_data->next_operation_changed_event, INFINITE, __FILE__, __LINE__);
-
-        // Acquire mutex to alter shared data
+        // Wait for the event to be signaled by either the UI thread or the callback
+        SyncWaitOnEvent(shared_data->event, INFINITE, __FILE__, __LINE__);
+        
+        // Acquire mutex to access shared data
         SyncLockMutex(shared_data->mutex, INFINITE, __FILE__, __LINE__);
 
-        // Store local copies of shared data
-        next_operation = shared_data->next_operation;
+        // Track whether later handling should be overruled
+        bool sound_player_operation_overruled = false;
+        bool callback_count_overruled = false;
 
-        // Mark sound player operation as busy
-        shared_data->next_operation = SOUND_PLAYER_OP_BUSY;
-
-        // Local variables to iteration
-        song_t* song_current = shared_data->song;
-        song_t* song_next = NULL;
-        playlist_error_e playlist_error = PLAYLIST_ERROR_NO;
-        song_error_e song_error = SONG_ERROR_NO;
-        bool reset_error = false;
-
-        // Handle next operation
-        switch (next_operation)
+        sound_player_operation_e ui_next_operation = shared_data->ui_next_operation;
+        // Check if we're to handle a command from the UI thread
+        if (ui_next_operation != SOUND_PLAYER_OP_READY)
         {
-            case SOUND_PLAYER_OP_READY:
+            // Regardless of the result of handling the UI thread's next operation it will be reset
+            shared_data->ui_next_operation = SOUND_PLAYER_OP_READY;
+
+            // Local variables
+            song_t* song_current = shared_data->song;
+            song_t* song_next = NULL;
+            playlist_error_e playlist_error = PLAYLIST_ERROR_NO;
+            song_error_e song_error = SONG_ERROR_NO;
+            bool operation_success = false;
+            bool load_initial_chunks = false;
+
+            // Handle next operation
+            switch (ui_next_operation)
             {
-                assert(0);
-            } break;
-
-            // This means we're loading a new playlist, and will try to load the first song in the playlist.
-            // It's possible for this to fail, in which the currently loaded playlist should be kept alive,
-            // and no change in behavior/state should be observed.
-            case SOUND_PLAYER_OP_PLAY:
-            {
-                // 1) Load playlist into playlist_next
-                playlist_error = PlaylistLoad(shared_data->playlist_next_file_path, &playlist_next);
-                switch (playlist_error)
+                case SOUND_PLAYER_OP_READY:
                 {
-                    case PLAYLIST_ERROR_NO: {} break;
+                    assert(0); // Shouldn't happen
+                } break;
 
-                    case PLAYLIST_ERROR_UNABLE_TO_OPEN_FILE:
-                    {
-                        sprintf(shared_data->error_message, "Unable to open playlist: %s", shared_data->playlist_next_file_path);
-                        shared_data->error_message_changed = true;
-                    } break;
-
-                    case PLAYLIST_ERROR_EMPTY:
-                    {
-                        sprintf(shared_data->error_message, "Playlist file is empty: %s", shared_data->playlist_next_file_path);
-                        shared_data->error_message_changed = true;
-                    } break;
-
-                    default:
-                    {
-                        printf("%s:%i Invalid error returned from PlaylistLoad()\n", __FILE__, __LINE__);
-                        exit(EXIT_FAILURE);
-                    } break;
-                }
-                if (playlist_error != PLAYLIST_ERROR_NO)
+                // This means we're loading a new playlist, and will try to load the first song in the playlist.
+                // It's possible for this to fail, in which the currently loaded playlist should be kept alive,
+                // and no change in behavior/state should be observed.
+                case SOUND_PLAYER_OP_PLAY:
                 {
-                    // Loading of playlist was incomplete, but there's no need to free anything in 'playlist_next'
-                    PlaylistInit(&playlist_next);
-                    break;
-                }
-
-                // Potentially shuffle playlist
-                if (shared_data->shuffle_state == SOUND_PLAYER_SHUFFLE_RANDOM)
-                {
-                    PlaylistShuffle(&playlist_next);
-                    song_next = &playlist_next.songs_shuffled[playlist_next.current_song_index];
-                }
-                else // SOUND_PLAYER_SHUFFLE_NO
-                {
-                    song_next = &playlist_next.songs[playlist_next.current_song_index];
-                }
-
-                // 2) Load sound file
-                switch (song_next->song_type)
-                {
-                    case SONG_TYPE_WAV:
+                    // 1) Load playlist into playlist_next
+                    playlist_error = PlaylistLoad(shared_data->playlist_next_file_path, &playlist_next);
+                    switch (playlist_error)
                     {
-                        song_error = WAVLoadHeader(song_next);
-                    } break;
+                        case PLAYLIST_ERROR_NO: {} break;
 
-                    case SONG_TYPE_FLAC:
-                    {
-                        //song_error = FLACLoad(song_next);
-                    } break;
+                        case PLAYLIST_ERROR_UNABLE_TO_OPEN_FILE:
+                        {
+                            sprintf(shared_data->error_message, "Unable to open playlist: %s", shared_data->playlist_next_file_path);
+                            shared_data->error_message_changed = true;
+                        } break;
 
-                    default:
-                    {
-                        printf("%s%i: Invalid sound file type %i\n", __FILE__, __LINE__, song_next->song_type);
-                        exit(EXIT_FAILURE);
+                        case PLAYLIST_ERROR_EMPTY:
+                        {
+                            sprintf(shared_data->error_message, "Playlist file is empty: %s", shared_data->playlist_next_file_path);
+                            shared_data->error_message_changed = true;
+                        } break;
+
+                        default:
+                        {
+                            printf("%s:%i Invalid error returned from PlaylistLoad()\n", __FILE__, __LINE__);
+                            exit(EXIT_FAILURE);
+                        } break;
                     }
-                }
-                switch (song_error)
-                {
-                    case SONG_ERROR_NO: {} break;
-
-                    case SONG_ERROR_UNABLE_TO_OPEN_FILE:
+                    if (playlist_error != PLAYLIST_ERROR_NO)
                     {
-                        sprintf(shared_data->error_message, "Unable to open audio file: %s", song_next->song_path_offset);
+                        // Loading of playlist was incomplete, but there's no need to free anything in 'playlist_next'
+                        PlaylistInit(&playlist_next);
+                        break;
+                    }
+
+                    // Potentially shuffle playlist
+                    if (shared_data->shuffle_state == SOUND_PLAYER_SHUFFLE_RANDOM)
+                    {
+                        PlaylistShuffle(&playlist_next);
+                        song_next = &playlist_next.songs_shuffled[playlist_next.current_song_index];
+                    }
+                    else // SOUND_PLAYER_SHUFFLE_NO
+                    {
+                        song_next = &playlist_next.songs[playlist_next.current_song_index];
+                    }
+
+                    // 2) Load sound file
+                    switch (song_next->song_type)
+                    {
+                        case SONG_TYPE_WAV:
+                        {
+                            song_error = WAVLoadHeader(song_next);
+                        } break;
+
+                        case SONG_TYPE_FLAC:
+                        {
+                            //song_error = FLACLoad(song_next);
+                        } break;
+
+                        default:
+                        {
+                            printf("%s%i: Invalid sound file type %i\n", __FILE__, __LINE__, song_next->song_type);
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    switch (song_error)
+                    {
+                        case SONG_ERROR_NO: {} break;
+
+                        case SONG_ERROR_UNABLE_TO_OPEN_FILE:
+                        {
+                            sprintf(shared_data->error_message, "Unable to open audio file: %s", song_next->song_path_offset);
+                            shared_data->error_message_changed = true;
+                        } break;
+
+                        case SONG_ERROR_INVALID_FILE:
+                        {
+                            sprintf(shared_data->error_message, "Not a proper audio file: %s", song_next->song_path_offset);
+                            shared_data->error_message_changed = true;
+                        } break;
+
+                        default:
+                        {
+                            printf("%s:%i Invalid error returned\n", __FILE__, __LINE__);
+                            exit(EXIT_FAILURE);
+                        } break;
+                    }
+                    if (song_error != SONG_ERROR_NO)
+                    {
+                        // Loading of sound file was incomplete, but no need to free anything in 'song_next'.
+                        // 'playlist_next' needs to be freed and reinitialized.
+                        PlaylistFree(&playlist_next);
+                        PlaylistInit(&playlist_next);
+                        break;
+                    }
+
+                    // 3) Pick audio device WAVE_MAPPER, and check that it can play the next WAV file's format
+                    if (AudioDeviceSupportsPlayback(song_next->sample_rate, song_next->bps, song_next->channel_count) == false)
+                    {
+                        sprintf(shared_data->error_message, "Unsupported audio format:\n\tSample rate: %i\n\tBits per sample: %i", song_next->sample_rate, song_next->bps * 8);
                         shared_data->error_message_changed = true;
-                    } break;
 
-                    case SONG_ERROR_INVALID_FILE:
+                        // Loading of sound file was complete, but playback isn't supported.
+                        // 'song_next''s audio data must be freed.
+                        // 'playlist_next' must be freed and reinitialized.
+                        SongFreeAudioData(song_next);
+                        PlaylistFree(&playlist_next);
+                        PlaylistInit(&playlist_next);
+                        break;
+                    }
+                    windows_audio_device_format.wFormatTag = WAVE_FORMAT_PCM;
+                    windows_audio_device_format.nChannels = song_next->channel_count;
+                    windows_audio_device_format.nSamplesPerSec = song_next->sample_rate;
+                    windows_audio_device_format.nAvgBytesPerSec = (song_next->sample_rate * song_next->channel_count * song_next->bps);
+                    windows_audio_device_format.nBlockAlign = (song_next->channel_count * song_next->bps);
+                    windows_audio_device_format.wBitsPerSample = song_next->bps * 8;
+                    windows_audio_device_format.cbSize = 0;
+
+                    // 4) If audio device is already open, close it
+                    if (*windows_audio_device != NULL)
                     {
-                        sprintf(shared_data->error_message, "Not a proper audio file: %s", song_next->song_path_offset);
-                        shared_data->error_message_changed = true;
-                    } break;
+                        AudioClose(*windows_audio_device, audio_headers, audio_buffer_count);
+                    }
 
-                    default:
+                    // 5) Open audio device with current settings
+                    AudioOpen(windows_audio_device, &windows_audio_device_format, (DWORD_PTR)&waveOutProc, (DWORD_PTR)&callback_data);
+
+                    // Reaching this point means there were no errors
+                    operation_success = true;
+                    load_initial_chunks = true;
+                    sound_player_operation_overruled = true;
+                    callback_count_overruled = true;
+                    SyncResetEvent(shared_data->event, __FILE__, __LINE__);
+
+                    // Update current song
+                    if (song_current != NULL)
                     {
-                        printf("%s:%i Invalid error returned\n", __FILE__, __LINE__);
-                        exit(EXIT_FAILURE);
-                    } break;
-                }
-                if (song_error != SONG_ERROR_NO)
-                {
-                    // Loading of sound file was incomplete, but no need to free anything in 'song_next'.
-                    // 'playlist_next' needs to be freed and reinitialized.
-                    PlaylistFree(&playlist_next);
+                        SongFreeAudioData(song_current);
+                    }
+                    shared_data->song = song_next;
+                    // Update current playlist
+                    if (playlist_current.songs != NULL)
+                    {
+                        PlaylistFree(&playlist_current);
+                    }
+                    playlist_current = playlist_next;
+                    strcpy(shared_data->playlist_current_file_path, shared_data->playlist_next_file_path);
+                    shared_data->playlist_current_changed = true;
                     PlaylistInit(&playlist_next);
-                    break;
-                }
+                } break;
 
-                // 3) Pick audio device WAVE_MAPPER, and check that it can play the next WAV file's format
-                if (AudioDeviceSupportsPlayback(song_next, &windows_audio_device_capabilities) == false)
+                // The next song in the playlist will be played
+                case SOUND_PLAYER_OP_NEXT:
                 {
-                    sprintf(shared_data->error_message, "Unsupported audio format:\n\tSample rate: %i\n\tBits per sample: %i", song_next->sample_rate, song_next->bps * 8);
-                    shared_data->error_message_changed = true;
+                    assert(playlist_current.songs != NULL);
 
-                    // Loading of sound file was complete, but playback isn't supported.
-                    // 'song_next''s audio data must be freed.
-                    // 'playlist_next' must be freed and reinitialized.
-                    SongFreeAudioData(song_next);
-                    PlaylistFree(&playlist_next);
-                    PlaylistInit(&playlist_next);
-                    break;
-                }
-                windows_audio_device_format.wFormatTag = WAVE_FORMAT_PCM;
-                windows_audio_device_format.nChannels = song_next->channel_count;
-                windows_audio_device_format.nSamplesPerSec = song_next->sample_rate;
-                windows_audio_device_format.nAvgBytesPerSec = (song_next->sample_rate * song_next->channel_count * song_next->bps);
-                windows_audio_device_format.nBlockAlign = (song_next->channel_count * song_next->bps); // If wFormatTag is WAVE_FORMAT_PCM or WAVE_FORMAT_EXTENSIBLE, nBlockAlign must be equal to the product of nChannels and wBitsPerSample divided by 8 (bits per byte).
-                windows_audio_device_format.wBitsPerSample = song_next->bps * 8;
-                windows_audio_device_format.cbSize = 0;
-
-                // 4) If audio device is already open, close it
-                if (*windows_audio_device != NULL)
-                {
-                    AudioClose(*windows_audio_device, audio_thread, audio_headers, audio_buffer_count);
-                }
-
-                // 5) Play song
-                AudioOpen(windows_audio_device, &windows_audio_device_format, (DWORD_PTR)&waveOutProc, (DWORD_PTR)shared_data);
-                AudioPlay(*windows_audio_device, song_next, &AudioThreadProc, &audio_thread_data, audio_thread_name, &audio_thread);
-
-                // Reaching this point means there were no errors
-                reset_error = true;
-
-                // Free current song's memory if it exists
-                if (song_current != NULL)
-                {
-                    SongFreeAudioData(song_current);
-                }
-                // Update current song
-                shared_data->song = song_next;
-                // Free current playlist's memory
-                if (playlist_current.songs != NULL)
-                {
-                    PlaylistFree(&playlist_current);
-                }
-                // Update current playlist
-                playlist_current = playlist_next;
-                strcpy(shared_data->playlist_current_file_path, shared_data->playlist_next_file_path);
-                shared_data->playlist_current_changed = true;
-                PlaylistInit(&playlist_next);
-            } break;
-
-            // This means that the current playlist will remain the current playlist.
-            // The next song in the playlist will be played.
-            case SOUND_PLAYER_OP_NEXT:
-            {
-                assert(playlist_current.songs != NULL);
-
-                // 1) Select next sound file to play
-                if ((shared_data->loop_state == SOUND_PLAYER_LOOP_SINGLE) ||
-                    ((shared_data->loop_state == SOUND_PLAYER_LOOP_PLAYLIST) && (playlist_current.song_count == 1)))
-                {
-                    // We have all the info, so just seek to the start of the audio data and continue as normal
-                    fseek(song_current->file, song_current->file_size - song_current->audio_data_size, SEEK_SET);
-                    break;
-                }
-                else
-                {
+                    // 1) Select next sound file to play
+                    // TODO: this case could be optimized
+                    /*if ((shared_data->loop_state == SOUND_PLAYER_LOOP_SINGLE) ||
+                        ((shared_data->loop_state == SOUND_PLAYER_LOOP_PLAYLIST) && (playlist_current.song_count == 1)))
+                    {}*/
                     playlist_current.current_song_index++;
                     if (playlist_current.current_song_index >= playlist_current.song_count)
                     {
@@ -638,159 +337,361 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                             playlist_current.current_song_index = 0;
                         }
                     }
-                }
+                    
 
-                // 2) Pick sound file
-                if (shared_data->shuffle_state == SOUND_PLAYER_SHUFFLE_RANDOM)
-                {
-                    song_next = &playlist_current.songs_shuffled[playlist_current.current_song_index];
-                }
-                else // SOUND_PLAYER_SHUFFLE_NO
-                {
-                    song_next = &playlist_current.songs[playlist_current.current_song_index];
-                }
-
-                // 3) Load sound file
-                switch (song_next->song_type)
-                {
-                    case SONG_TYPE_WAV:
+                    // 2) Pick sound file
+                    if (shared_data->shuffle_state == SOUND_PLAYER_SHUFFLE_RANDOM)
                     {
-                        song_error = WAVLoadHeader(song_next);
-                    } break;
-
-                    case SONG_TYPE_FLAC:
-                    {
-                        assert(0);
-                        //song_error = FLACLoad(song_next);
-                    } break;
-
-                    default:
-                    {
-                        printf("%s%i: Invalid sound type %i\n", __FILE__, __LINE__, song_next->song_type);
-                        exit(EXIT_FAILURE);
+                        song_next = &playlist_current.songs_shuffled[playlist_current.current_song_index];
                     }
-                }
-                switch (song_error)
-                {
-                    case SONG_ERROR_NO: {} break;
-
-                    case SONG_ERROR_UNABLE_TO_OPEN_FILE:
+                    else // SOUND_PLAYER_SHUFFLE_NO
                     {
-                        sprintf(shared_data->error_message, "Unable to open audio file: %s", song_next->song_path_offset);
+                        song_next = &playlist_current.songs[playlist_current.current_song_index];
+                    }
+
+                    // 3) Load sound file
+                    switch (song_next->song_type)
+                    {
+                        case SONG_TYPE_WAV:
+                        {
+                            song_error = WAVLoadHeader(song_next);
+                        } break;
+
+                        case SONG_TYPE_FLAC:
+                        {
+                            assert(0);
+                            //song_error = FLACLoad(song_next);
+                        } break;
+
+                        default:
+                        {
+                            printf("%s%i: Invalid sound type %i\n", __FILE__, __LINE__, song_next->song_type);
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    switch (song_error)
+                    {
+                        case SONG_ERROR_NO: {} break;
+
+                        case SONG_ERROR_UNABLE_TO_OPEN_FILE:
+                        {
+                            sprintf(shared_data->error_message, "Unable to open audio file: %s", song_next->song_path_offset);
+                            shared_data->error_message_changed = true;
+                        } break;
+
+                        case SONG_ERROR_INVALID_FILE:
+                        {
+                            sprintf(shared_data->error_message, "Not a proper audio file: %s", song_next->song_path_offset);
+                            shared_data->error_message_changed = true;
+                        } break;
+
+                        default:
+                        {
+                            printf("%s:%i Invalid error returned\n", __FILE__, __LINE__);
+                            exit(EXIT_FAILURE);
+                        } break;
+                    }
+                    if (song_error != SONG_ERROR_NO)
+                    {
+                        // Loading of sound file was incomplete.
+                        // No need to free audio data.
+                        break;
+                    }
+
+                    // 4) Pick audio device WAVE_MAPPER, and check that it can play the next WAV file's format
+                    if (AudioDeviceSupportsPlayback(song_next->sample_rate, song_next->bps, song_next->channel_count) == false)
+                    {
+                        sprintf(shared_data->error_message, "Unsupported audio format:\n\tSample rate: %i\n\tBits per sample: %i", song_next->sample_rate, song_next->bps * 8);
                         shared_data->error_message_changed = true;
-                    } break;
 
-                    case SONG_ERROR_INVALID_FILE:
-                    {
-                        sprintf(shared_data->error_message, "Not a proper audio file: %s", song_next->song_path_offset);
-                        shared_data->error_message_changed = true;
-                    } break;
+                        // Loading of WAV file was complete, but playback isn't supported.
+                        // 'song_next''s audio data must be freed.
+                        SongFreeAudioData(song_next);
+                        break;
+                    }
+                    windows_audio_device_format.wFormatTag = WAVE_FORMAT_PCM;
+                    windows_audio_device_format.nChannels = song_next->channel_count;
+                    windows_audio_device_format.nSamplesPerSec = song_next->sample_rate;
+                    windows_audio_device_format.nAvgBytesPerSec = song_next->sample_rate * song_next->channel_count * song_next->bps;
+                    windows_audio_device_format.nBlockAlign = song_next->channel_count * song_next->bps; // If wFormatTag is WAVE_FORMAT_PCM or WAVE_FORMAT_EXTENSIBLE, nBlockAlign must be equal to the product of nChannels and wBitsPerSample divided by 8 (bits per byte).
+                    windows_audio_device_format.wBitsPerSample = song_next->bps * 8;
+                    windows_audio_device_format.cbSize = 0;
 
-                    default:
-                    {
-                        printf("%s:%i Invalid error returned\n", __FILE__, __LINE__);
-                        exit(EXIT_FAILURE);
-                    } break;
-                }
-                if (song_error != SONG_ERROR_NO)
-                {
-                    // Loading of sound file was incomplete.
-                    // No need to free audio data.
-                    break;
-                }
-
-                // 4) Pick audio device WAVE_MAPPER, and check that it can play the next WAV file's format
-                if (AudioDeviceSupportsPlayback(song_next, &windows_audio_device_capabilities) == false)
-                {
-                    sprintf(shared_data->error_message, "Unsupported audio format:\n\tSample rate: %i\n\tBits per sample: %i", song_next->sample_rate, song_next->bps * 8);
-                    shared_data->error_message_changed = true;
-
-                    // Loading of WAV file was complete, but playback isn't supported.
-                    // 'song_next''s audio data must be freed.
-                    SongFreeAudioData(song_next);
-                    break;
-                }
-                windows_audio_device_format.wFormatTag = WAVE_FORMAT_PCM;
-                windows_audio_device_format.nChannels = song_next->channel_count;
-                windows_audio_device_format.nSamplesPerSec = song_next->sample_rate;
-                windows_audio_device_format.nAvgBytesPerSec = song_next->sample_rate * song_next->channel_count * song_next->bps;
-                windows_audio_device_format.nBlockAlign = song_next->channel_count * song_next->bps; // If wFormatTag is WAVE_FORMAT_PCM or WAVE_FORMAT_EXTENSIBLE, nBlockAlign must be equal to the product of nChannels and wBitsPerSample divided by 8 (bits per byte).
-                windows_audio_device_format.wBitsPerSample = song_next->bps * 8;
-                windows_audio_device_format.cbSize = 0;
-
-                // 5) Re-open audio device with new settings
-                // If the previous file tried played didn't play, the audio device might not be open
-                // It is not open if there is already a song playing when the previous file was tried played
-                if (*windows_audio_device != NULL)
-                {
-                    // Will invoke callback
-                    AudioClose(*windows_audio_device, audio_thread, audio_headers, audio_buffer_count);
-                }
-
-                // 6) Play next sound file
-                AudioOpen(windows_audio_device, &windows_audio_device_format, (DWORD_PTR)&waveOutProc, (DWORD_PTR)shared_data);
-                AudioPlay(*windows_audio_device, song_next, AudioThreadProc, &audio_thread_data, audio_thread_name, &audio_thread);
-
-                // Reaching this point means there were no errors
-                reset_error = true;
-
-                // Free current song's memory if one is loaded
-                assert(song_current->file != NULL);
-                SongFreeAudioData(song_current);
-                // Update current song
-                shared_data->song = song_next;
-            } break;
-
-            case SOUND_PLAYER_OP_PREVIOUS:
-            {
-                // TODO (Daniel): when OP_NEXT handling is stable, copy-paste it and change the direction of the next song
-                assert(0);
-            } break;
-
-            case SOUND_PLAYER_OP_PAUSE:
-            {
-                AudioPause(*windows_audio_device);
-
-                // Reaching this point means there were no errors
-                reset_error = true;
-            } break;
-
-            case SOUND_PLAYER_OP_RESUME:
-            {
-                AudioResume(*windows_audio_device);
-
-                // Reaching this point means there were no errors
-                reset_error = true;
-            } break;
-
-            case SOUND_PLAYER_OP_SHUFFLE:
-            {
-                // Check that a playlist is currently loaded before trying to shuffle it
-                if (playlist_current.songs != NULL)
-                {
-                    PlaylistShuffle(&playlist_current);
+                    // 6) Play next sound file
+                    assert(windows_audio_device != NULL);
+                    AudioClose(*windows_audio_device, audio_headers, audio_buffer_count);
+                    AudioOpen(windows_audio_device, &windows_audio_device_format, (DWORD_PTR)&waveOutProc, (DWORD_PTR)&callback_data);
 
                     // Reaching this point means there were no errors
-                    reset_error = true;
-                }
-            } break;
+                    operation_success = true;
+                    load_initial_chunks = true;
+                    sound_player_operation_overruled = true;
+                    callback_count_overruled = true;
 
-            default:
+                    // Free current song's memory if one is loaded
+                    assert(song_current->file != NULL);
+                    SongFreeAudioData(song_current);
+                    // Update current song
+                    shared_data->song = song_next;
+                } break;
+
+                case SOUND_PLAYER_OP_PREVIOUS:
+                {
+                    // TODO (Daniel): when OP_NEXT handling is stable, copy-paste it and change the direction of the next song
+                    assert(0);
+                } break;
+
+                case SOUND_PLAYER_OP_PAUSE:
+                {
+                    AudioPause(*windows_audio_device);
+
+                    // Reaching this point means there were no errors
+                    operation_success = true;
+                    sound_player_operation_overruled = true;
+                } break;
+
+                case SOUND_PLAYER_OP_RESUME:
+                {
+                    AudioResume(*windows_audio_device);
+
+                    // Reaching this point means there were no errors
+                    operation_success = true;
+                    sound_player_operation_overruled = true;
+                } break;
+
+                case SOUND_PLAYER_OP_SHUFFLE:
+                {
+                    // Check that a playlist is currently loaded before trying to shuffle it
+                    if (playlist_current.songs != NULL)
+                    {
+                        PlaylistShuffle(&playlist_current);
+
+                        // Reaching this point means there were no errors
+                        operation_success = true;
+                    }
+                } break;
+
+                default:
+                {
+                    assert(0);
+                }
+            }
+
+            // If the operation was handled successfully, it means the previous error can be cleared
+            if (operation_success == true)
             {
-                assert(0);
+                shared_data->error_message[0] = '\0';
+                shared_data->error_message_changed = true;
+            }
+
+            // If the operation was handled successfully and the operation was either PLAY, NEXT or PREVIOUS
+            // we want to
+            //  1) reset the callback counter, so that we only start loading in new chunks when the initial chunks of the new songs start to finish playback
+            //  2) reset the event, so that if the callback has signaled the event while we were handling the operation, we ignore that signal as we're loading
+            //     in new initial chunks, and reset the callback counter
+            if ((operation_success == true) &&
+                ((ui_next_operation == SOUND_PLAYER_OP_PLAY) || (ui_next_operation == SOUND_PLAYER_OP_NEXT) || (ui_next_operation == SOUND_PLAYER_OP_PREVIOUS)))
+            {
+                InterlockedExchange((volatile LONG*)&callback_data.callback_count_atomic, 0);
+                SyncResetEvent(shared_data->event, __FILE__, __LINE__);
+            }
+
+            // If this is set we've loaded a new song (either through PLAY, NEXT or PREVIOUS), and we need to load its initial chunks
+            if (load_initial_chunks == true)
+            {
+                // Compute info about current song for sample-rate conversion
+                input_rate = shared_data->song->sample_rate;
+                resampling_factor = (input_rate + (input_rate - (slow_down_factor * input_rate))) / input_rate;
+                output_rate = input_rate * resampling_factor;
+                gcd = FindGreatestCommonDivisor(input_rate, output_rate);
+                L = output_rate / gcd; // Upsampling factor
+                M = input_rate / gcd; // Decimation factor
+                bps = shared_data->song->bps;
+                channel_count = shared_data->song->channel_count;
+                bps_all_channels = channel_count * bps;
+                max_sample_count_in_audio_buffer = audio_buffer_size / bps_all_channels; // Ensure it fits all samples for a channel
+                max_sample_count_in_audio_buffer_all_channels = max_sample_count_in_audio_buffer * channel_count; // Scale up to get number of individual samples
+                max_sample_count_upsampled_all_channels = max_sample_count_in_audio_buffer_all_channels * L;
+                max_sample_count_decimated_all_channels = (max_sample_count_upsampled_all_channels / M);
+                max_sample_count_decimated_all_channels -= (max_sample_count_decimated_all_channels % channel_count); // Ensure we can fit entire channels
+
+                // Set playback data
+                playback_data.audio_device = shared_data->audio_device;
+                playback_data.file = shared_data->song->file;
+                playback_data.file_size = shared_data->song->file_size;
+                playback_data.sample_rate = shared_data->song->sample_rate;
+                playback_data.channel_count = shared_data->song->channel_count;
+                playback_data.bps = shared_data->song->bps;
+
+                // Check if any buffers already exists, and if so, free them
+                if (filter != NULL)
+                {
+                    free(filter);
+                }
+                if (prefetch_buffer != NULL)
+                {
+                    free(prefetch_buffer);
+                }
+                if (upsampled_audio_data != NULL)
+                {
+                    free(upsampled_audio_data);
+                }
+                if (upsampled_audio_data_with_prefetch_buffer != NULL)
+                {
+                    free(upsampled_audio_data_with_prefetch_buffer);
+                }
+                if (upsampled_audio_data_filtered != NULL)
+                {
+                    free(upsampled_audio_data_filtered);
+                }
+                for (uint8_t i = 0; i < audio_buffer_count; i++)
+                {
+                    if (upsampled_audio_data_finals[i] != NULL)
+                    {
+                        free(upsampled_audio_data_finals[i]);
+                    }
+                }
+
+                // (Re)Allocate buffers
+                filter = (float*)malloc(filter_length * sizeof(float));
+                prefetch_buffer = (byte_t*)malloc(filter_length * channel_count * bps);
+                upsampled_audio_data = (byte_t*)malloc(max_sample_count_upsampled_all_channels * bps);
+                upsampled_audio_data_with_prefetch_buffer = (byte_t*)malloc((max_sample_count_upsampled_all_channels + (filter_length * channel_count)) * bps);
+                upsampled_audio_data_filtered = (byte_t*)malloc(max_sample_count_upsampled_all_channels * bps);
+                for (uint8_t i = 0; i < audio_buffer_count; i++)
+                {
+                    upsampled_audio_data_finals[i] = (byte_t*)malloc(max_sample_count_decimated_all_channels * bps);
+                }
+
+                // Compute filter
+                LowPassFilterCreate(input_rate, L, filter_length, filter, FILTER_TYPE_SINC, WINDOW_TYPE_HAMMING);
+
+                // Preload first N-1 audio_buffers
+                audio_buffer_index = 0;
+                for (uint32_t i = 0; i < audio_buffer_count - 1; i++)
+                {
+                    // Load audio data
+                    audio_buffer_data_available_size[audio_buffer_index] = WAVLoadData(&playback_data, audio_buffer_size, audio_buffers[audio_buffer_index]);
+
+                    // Ensure there's audio data
+                    if (audio_buffer_data_available_size[audio_buffer_index] == 0)
+                    {
+                        assert(0); // Need to handle this
+                    }
+
+                    if (slow_down_factor < 1.0f)
+                    {
+                        // Perform sample-rate conversion
+                        uint32_t sample_count_all_channels = audio_buffer_data_available_size[audio_buffer_index] / bps;
+                        uint32_t sample_count_output_all_channels = SampleRateConvert(input_rate, output_rate, L, M, slow_down_factor, sample_count_all_channels, bps, channel_count, audio_buffers[audio_buffer_index], upsampled_audio_data, prefetch_buffer, filter_length, filter, upsampled_audio_data_with_prefetch_buffer, upsampled_audio_data_filtered, upsampled_audio_data_finals[audio_buffer_index]);
+                        audio_headers[audio_buffer_index].lpData = (LPSTR)upsampled_audio_data_finals[audio_buffer_index];
+                        audio_headers[audio_buffer_index].dwBufferLength = sample_count_output_all_channels * bps;
+                        audio_headers[audio_buffer_index].dwBytesRecorded = 0;
+                        audio_headers[audio_buffer_index].dwUser = NULL;
+                        audio_headers[audio_buffer_index].dwFlags = 0;
+                        audio_headers[audio_buffer_index].dwLoops = 0;
+                    }
+                    else
+                    {
+                        audio_headers[audio_buffer_index].lpData = (LPSTR)audio_buffers[audio_buffer_index];
+                        audio_headers[audio_buffer_index].dwBufferLength = audio_buffer_data_available_size[audio_buffer_index];
+                        audio_headers[audio_buffer_index].dwBytesRecorded = 0;
+                        audio_headers[audio_buffer_index].dwUser = NULL;
+                        audio_headers[audio_buffer_index].dwFlags = 0;
+                        audio_headers[audio_buffer_index].dwLoops = 0;
+                    }
+                    // Send audio data to audio device
+                    MMRESULT res_mmresult = waveOutPrepareHeader(playback_data.audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
+                    assert(res_mmresult == MMSYSERR_NOERROR);
+                    res_mmresult = waveOutWrite(playback_data.audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
+                    assert(res_mmresult == MMSYSERR_NOERROR);
+                    audio_buffer_index = (audio_buffer_index + 1) % audio_buffer_count;
+                }
             }
         }
 
-        // Update shared data
-        shared_data->next_operation = SOUND_PLAYER_OP_READY;
-        if (reset_error == true)
+        // Check if we're to handle a command from the sound player
+        if (sound_player_operation_overruled == true)
         {
-            shared_data->error_message[0] = '\0';
-            shared_data->error_message_changed = true;
+            sound_player_next_operation = SOUND_PLAYER_OP_READY;
+        }
+        else
+        {
+            if (sound_player_next_operation != SOUND_PLAYER_OP_READY)
+            {
+                assert(sound_player_next_operation == SOUND_PLAYER_OP_NEXT);
+
+                shared_data->ui_next_operation = sound_player_next_operation;
+                sound_player_next_operation = SOUND_PLAYER_OP_READY;
+                callback_count_overruled = true;
+                SyncSetEvent(shared_data->event, __FILE__, __LINE__);
+            }
         }
 
         // Release mutex
         SyncReleaseMutex(shared_data->mutex, __FILE__, __LINE__);
+
+        // Check if we're to handle the callback having been invoked
+        int32_t callback_count = callback_data.callback_count_atomic;
+        if ((callback_count_overruled == false) &&
+            (callback_count > 0))
+        {
+            // Load next chunk of audio file
+            audio_buffer_data_available_size[audio_buffer_index] = WAVLoadData(&playback_data, audio_buffer_size, audio_buffers[audio_buffer_index]);
+
+            // No more data to play back
+            if (audio_buffer_data_available_size[audio_buffer_index] == 0)
+            {
+                sound_player_next_operation = SOUND_PLAYER_OP_NEXT;
+                SyncSetEvent(shared_data->event, __FILE__, __LINE__);
+            }
+
+            // Check if performing sample-rate conversion is necessary
+            assert(slow_down_factor <= 1.0f);
+            if (slow_down_factor < 1.0f)
+            {
+                // Perform sample-rate conversion
+                uint32_t sample_count_all_channels = audio_buffer_data_available_size[audio_buffer_index] / bps;
+                uint32_t sample_count_output_all_channels = SampleRateConvert(input_rate, output_rate, L, M, slow_down_factor, sample_count_all_channels, bps, channel_count, audio_buffers[audio_buffer_index], upsampled_audio_data, prefetch_buffer, filter_length, filter, upsampled_audio_data_with_prefetch_buffer, upsampled_audio_data_filtered, upsampled_audio_data_finals[audio_buffer_index]);
+
+                // Send audio data to audio device
+                audio_headers[audio_buffer_index].lpData = (LPSTR)upsampled_audio_data_finals[audio_buffer_index];
+                audio_headers[audio_buffer_index].dwBufferLength = sample_count_output_all_channels * bps;
+                audio_headers[audio_buffer_index].dwBytesRecorded = 0;
+                audio_headers[audio_buffer_index].dwUser = NULL;
+                audio_headers[audio_buffer_index].dwFlags = 0;
+                audio_headers[audio_buffer_index].dwLoops = 0;
+            }
+            else
+            {
+                // Send audio data to audio device
+                audio_headers[audio_buffer_index].lpData = (LPSTR)audio_buffers[audio_buffer_index];
+                audio_headers[audio_buffer_index].dwBufferLength = audio_buffer_data_available_size[audio_buffer_index];
+                audio_headers[audio_buffer_index].dwBytesRecorded = 0;
+                audio_headers[audio_buffer_index].dwUser = NULL;
+                audio_headers[audio_buffer_index].dwFlags = 0;
+                audio_headers[audio_buffer_index].dwLoops = 0;
+            }
+            MMRESULT res_mmresult = waveOutPrepareHeader(playback_data.audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
+            assert(res_mmresult == MMSYSERR_NOERROR);
+            res_mmresult = waveOutWrite(playback_data.audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
+            assert(res_mmresult == MMSYSERR_NOERROR);
+            audio_buffer_index = (audio_buffer_index + 1) % audio_buffer_count;
+
+            // Unprepare header
+            res_mmresult = waveOutUnprepareHeader(playback_data.audio_device, &audio_headers[audio_buffer_index], sizeof(WAVEHDR));
+            assert(res_mmresult == MMSYSERR_NOERROR);
+
+            // Update playback buffer
+            SyncLockMutex(shared_data->current_playback_buffer_mutex, INFINITE, __FILE__, __LINE__);
+            uint8_t audio_buffer_index_next = (audio_buffer_index + 1) % audio_buffer_count;
+            memcpy(shared_data->current_playback_buffer, audio_buffers[audio_buffer_index_next], audio_buffer_data_available_size[audio_buffer_index_next]);
+            shared_data->current_playback_buffer_size = audio_buffer_data_available_size[audio_buffer_index_next];
+            SyncReleaseMutex(shared_data->current_playback_buffer_mutex, __FILE__, __LINE__);
+
+            // Decrement atomic counter
+            InterlockedDecrement((volatile LONG*)&callback_data.callback_count_atomic);
+        }
     }
 
     return EXIT_SUCCESS;

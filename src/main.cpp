@@ -88,7 +88,7 @@ int main(int argc, char** argv)
     // Settings //
     //////////////
     bool ui_command_line_showing = false;
-    bool viz_enabled = true;
+    bool viz_enabled = false;
 
 
 
@@ -129,7 +129,7 @@ int main(int argc, char** argv)
     SceneUIInit(&vulkan);
 
     // Local data used to store shared data to avoid holding the mutex for an extended period of time
-    sound_player_operation_e sound_player_next_operation = SOUND_PLAYER_OP_READY;
+    sound_player_operation_e sound_player_ui_next_operation = SOUND_PLAYER_OP_READY;
     sound_player_loop_e sound_player_loop_state = SOUND_PLAYER_LOOP_NO;
     sound_player_shuffle_e sound_player_shuffle_state = SOUND_PLAYER_SHUFFLE_NO;
     bool sound_player_loop_state_changed = false;
@@ -176,9 +176,9 @@ int main(int argc, char** argv)
     sound_player_shared_data.current_playback_buffer = dft_current_playback_buffer_shared;
     sound_player_shared_data.current_playback_buffer_size = 0;
     sound_player_shared_data.song = NULL;
-    sound_player_shared_data.next_operation_changed_event = CreateEventA(NULL, FALSE, FALSE, "SharedDataOperationChangedEvent");
-    assert(sound_player_shared_data.next_operation_changed_event != NULL);
-    sound_player_shared_data.next_operation = SOUND_PLAYER_OP_READY;
+    sound_player_shared_data.event = CreateEventA(NULL, FALSE, FALSE, "SharedDataOperationChangedEvent");
+    assert(sound_player_shared_data.event != NULL);
+    sound_player_shared_data.ui_next_operation = SOUND_PLAYER_OP_READY;
     sound_player_shared_data.loop_state = SOUND_PLAYER_LOOP_NO;
     sound_player_shared_data.shuffle_state = SOUND_PLAYER_SHUFFLE_NO;
     sound_player_shared_data.playlist_current_changed = false;
@@ -205,7 +205,7 @@ int main(int argc, char** argv)
     while (1)
     {
         // Reset data
-        sound_player_next_operation = SOUND_PLAYER_OP_READY;
+        sound_player_ui_next_operation = SOUND_PLAYER_OP_READY;
         sound_player_loop_state = SOUND_PLAYER_LOOP_NO;
         sound_player_shuffle_state = SOUND_PLAYER_SHUFFLE_NO;
         sound_player_loop_state_changed = false;
@@ -306,7 +306,7 @@ int main(int argc, char** argv)
                                     *argument_end = '\0'; // Null-terminate
                                 }
 
-                                sound_player_next_operation = SOUND_PLAYER_OP_PLAY;
+                                sound_player_ui_next_operation = SOUND_PLAYER_OP_PLAY;
                                 strcpy(sound_player_playlist_next_file_path, argument);
                             }
                             else if (strcmp(command, "next") == 0)
@@ -316,7 +316,7 @@ int main(int argc, char** argv)
                                     SceneUIUpdateInfoMessage("Command 'next' does not take an argument...ignoring", INFO_SECTION_ROW_ERROR);
                                 }
 
-                                sound_player_next_operation = SOUND_PLAYER_OP_NEXT;
+                                sound_player_ui_next_operation = SOUND_PLAYER_OP_NEXT;
                             }
                             else if (strcmp(command, "previous") == 0)
                             {
@@ -325,7 +325,7 @@ int main(int argc, char** argv)
                                     SceneUIUpdateInfoMessage("Command 'previous' does not take an argument...ignoring", INFO_SECTION_ROW_ERROR);
                                 }
 
-                                sound_player_next_operation = SOUND_PLAYER_OP_PREVIOUS;
+                                sound_player_ui_next_operation = SOUND_PLAYER_OP_PREVIOUS;
                             }
                             else if (strcmp(command, "pause") == 0)
                             {
@@ -334,7 +334,7 @@ int main(int argc, char** argv)
                                     SceneUIUpdateInfoMessage("Command 'pause' does not take an argument...ignoring", INFO_SECTION_ROW_ERROR);
                                 }
 
-                                sound_player_next_operation = SOUND_PLAYER_OP_PAUSE;
+                                sound_player_ui_next_operation = SOUND_PLAYER_OP_PAUSE;
                             }
                             else if (strcmp(command, "resume") == 0)
                             {
@@ -343,7 +343,7 @@ int main(int argc, char** argv)
                                     SceneUIUpdateInfoMessage("Command 'resume' does not take an argument...ignoring", INFO_SECTION_ROW_ERROR);
                                 }
 
-                                sound_player_next_operation = SOUND_PLAYER_OP_RESUME;
+                                sound_player_ui_next_operation = SOUND_PLAYER_OP_RESUME;
                             }
                             else if (strcmp(command, "loop_no") == 0)
                             {
@@ -367,7 +367,7 @@ int main(int argc, char** argv)
                             }
                             else if (strcmp(command, "shuffle") == 0)
                             {
-                                sound_player_next_operation = SOUND_PLAYER_OP_SHUFFLE;
+                                sound_player_ui_next_operation = SOUND_PLAYER_OP_SHUFFLE;
                                 sound_player_shuffle_state = SOUND_PLAYER_SHUFFLE_RANDOM;
                                 sound_player_shuffle_state_changed = true;
                             }
@@ -572,42 +572,20 @@ reset_sound_player_command:
             sound_player_shared_data.shuffle_state = sound_player_shuffle_state;
         }
         // Update next operation in sound player
-        if (sound_player_next_operation != SOUND_PLAYER_OP_READY)
+        if (sound_player_ui_next_operation != SOUND_PLAYER_OP_READY)
         {
-            bool mutex_locked = true;
-            while (1)
+            sound_player_shared_data.ui_next_operation = sound_player_ui_next_operation;
+            switch (sound_player_ui_next_operation)
             {
-                if (mutex_locked == false)
+                case SOUND_PLAYER_OP_PLAY:
                 {
-                    SyncLockMutex(sound_player_shared_data.mutex, INFINITE, __FILE__, __LINE__);
-                    mutex_locked = true;
-                }
+                    strcpy(sound_player_shared_data.playlist_next_file_path, sound_player_playlist_next_file_path);
+                } break;
 
-                if (sound_player_shared_data.next_operation != SOUND_PLAYER_OP_BUSY)
-                {
-                    sound_player_shared_data.next_operation = sound_player_next_operation;
-
-                    switch (sound_player_next_operation)
-                    {
-                        case SOUND_PLAYER_OP_PLAY:
-                        {
-                            strcpy(sound_player_shared_data.playlist_next_file_path, sound_player_playlist_next_file_path);
-                        } break;
-
-                        default: {} break;
-                    }
-
-                    SyncSetEvent(sound_player_shared_data.next_operation_changed_event, __FILE__, __LINE__);
-                    break;
-                }
-                else
-                {
-                    SyncReleaseMutex(sound_player_shared_data.mutex, __FILE__, __LINE__);
-                    mutex_locked = false;
-                }
+                default: {} break;
             }
+            SyncSetEvent(sound_player_shared_data.event, __FILE__, __LINE__);
         }
-        // Finished accessing shared data
         SyncReleaseMutex(sound_player_shared_data.mutex, __FILE__, __LINE__);
 
         // Get and store samples to be used for DFT from sound player

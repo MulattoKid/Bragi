@@ -110,7 +110,7 @@ song_error_e WAVLoadHeader(song_t* song)
     return SONG_ERROR_NO;
 }
 
-uint32_t WAVLoadData(audio_thread_shared_data_t* audio_thread_data, uint64_t output_size, byte_t* output)
+uint32_t WAVLoadData(playback_data_t* audio_thread_data, uint64_t output_size, byte_t* output)
 {
     assert(audio_thread_data != NULL);
     assert(output_size > 0);

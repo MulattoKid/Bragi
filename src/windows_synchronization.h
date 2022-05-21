@@ -26,5 +26,6 @@ DWORD SyncTryLockMutex(HANDLE mutex, DWORD wait_time_ms, const char* calle_file,
 void SyncReleaseMutex(HANDLE mutex, const char* calle_file, int calle_line_number);
 void SyncSetEvent(HANDLE event, const char* calle_file, int calle_line_number);
 void SyncWaitOnEvent(HANDLE event, DWORD wait_time_ms, const char* calle_file, int calle_line_number);
+void SyncResetEvent(HANDLE event, const char* calle_file, int calle_line_number);
 
 #endif

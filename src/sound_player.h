@@ -25,7 +25,6 @@
 
 enum sound_player_operation_e
 {
-    SOUND_PLAYER_OP_BUSY     = 0,
     SOUND_PLAYER_OP_READY    = 1,
     SOUND_PLAYER_OP_PLAY     = 2,
     SOUND_PLAYER_OP_NEXT     = 3,
@@ -51,11 +50,12 @@ enum sound_player_shuffle_e
 // TODO (Daniel): pack properly
 struct sound_player_shared_data_t
 {
-    HANDLE                   next_operation_changed_event;
+    HANDLE                   event;
+    sound_player_operation_e ui_next_operation;
+    
     HANDLE                   mutex; // Required to be locked before accessing below members
     song_t*                  song;
     HWAVEOUT                 audio_device;
-    sound_player_operation_e next_operation;
     sound_player_loop_e      loop_state;
     sound_player_shuffle_e   shuffle_state;
     bool                     playlist_current_changed;
@@ -69,21 +69,20 @@ struct sound_player_shared_data_t
     uint64_t                 current_playback_buffer_size;
 };
 
-struct audio_thread_shared_data_t
+struct playback_data_t
 {
-    HANDLE                    sound_player_event;
-    HANDLE                    sound_player_mutex; // Required to be locked before accessing below members
-    sound_player_operation_e* sound_player_op;
     HWAVEOUT                  audio_device;
     FILE*                     file;
     uint64_t                  file_size;
     uint32_t                  sample_rate;
     uint8_t                   channel_count;
     uint8_t                   bps; // Bytes per sample
+};
 
-    HANDLE                    current_playback_buffer_mutex; // Required to be locked before accessing below members
-    byte_t*                   current_playback_buffer;
-    uint64_t*                 current_playback_buffer_size;
+struct callback_data_t
+{
+    HANDLE event;
+    int32_t callback_count_atomic;
 };
 
 void CALLBACK waveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2);

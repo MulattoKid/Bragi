@@ -15,6 +15,7 @@
     <ClCompile Include="..\src\windows_synchronization.cpp" />
     <ClCompile Include="..\src\windows_thread.cpp" />
     <ClCompile Include="..\src\windows_window.cpp" />
+    <ClCompile Include="..\src\audio.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\dft.h" />
@@ -31,5 +32,6 @@
     <ClInclude Include="..\src\windows_synchronization.h" />
     <ClInclude Include="..\src\windows_thread.h" />
     <ClInclude Include="..\src\windows_window.h" />
+    <ClInclude Include="..\src\audio.h" />
   </ItemGroup>
 </Project>
