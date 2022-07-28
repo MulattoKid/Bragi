@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <time.h>
 
-extern bool running;
+extern uint8_t running;
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugMessagePrinter(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -32,6 +32,22 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugMessagePrinter(
 {
     printf("Vulkan validation message: %s\n", pCallbackData->pMessage);
     return VK_FALSE;
+}
+
+static void VulkanSetObjectNameInternal(VkDevice device, VkObjectType object_type, uint64_t object, const char* name, PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT)
+{
+    VkDebugUtilsObjectNameInfoEXT name_info;
+    name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+    name_info.pNext = NULL;
+    name_info.objectType = object_type;
+    name_info.objectHandle = object;
+    name_info.pObjectName = name;
+    VK_CHECK_RES(vkSetDebugUtilsObjectNameEXT(device, &name_info));
+}
+
+void VulkanSetObjectName(vulkan_context_t* vulkan, VkObjectType object_type, uint64_t object, const char* name)
+{
+    VulkanSetObjectNameInternal(vulkan->device, object_type, object, name, vulkan->vkSetDebugUtilsObjectNameEXT);
 }
 
 void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulkan)
@@ -75,7 +91,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     app_info.apiVersion = target_api_version;
 
     // Instance layers
-    const uint32_t instance_layers_required_count = 1;
+    #define instance_layers_required_count 1
     const char* instance_layers_required[instance_layers_required_count] = {
         "VK_LAYER_KHRONOS_validation"
     };
@@ -100,7 +116,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     free(instance_layers);
 
     // Instance extensions
-    const uint32_t instance_extensions_required_count = 3;
+    #define instance_extensions_required_count 3
     const char* instance_extensions_required[instance_extensions_required_count] = {
         VK_KHR_SURFACE_EXTENSION_NAME,
         VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
@@ -385,7 +401,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     free(queue_families);
 
     // Physcial device extensions
-    const uint32_t physical_device_extensions_required_count = 1;
+    #define physical_device_extensions_required_count 1
     const char* physical_device_extensions_required[physical_device_extensions_required_count] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
@@ -449,7 +465,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     // Queue
     VkQueue queue = VK_NULL_HANDLE;
     vkGetDeviceQueue(device, queue_index, 0, &queue);
-    VulkanSetObjectName(device, VK_OBJECT_TYPE_QUEUE, (uint64_t)queue, "Main Queue", vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_QUEUE, (uint64_t)queue, "Main Queue", vkSetDebugUtilsObjectNameEXT);
 
     // Swapchain
     VkSwapchainCreateInfoKHR swapchain_info;
@@ -485,7 +501,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
         memset(object_name, 0, 128);
         sprintf(object_name, "Swapchain Image ");
         sprintf(object_name + 16, "%u", i);
-        VulkanSetObjectName(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)swapchain_images[i], object_name, vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)swapchain_images[i], object_name, vkSetDebugUtilsObjectNameEXT);
     }
 
     // Swapchain image views
@@ -513,7 +529,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
         memset(object_name, 0, 128);
         sprintf(object_name, "Swapchain Image View ");
         sprintf(object_name + 21, "%u", i);
-        VulkanSetObjectName(device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)swapchain_image_views[i], object_name, vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)swapchain_image_views[i], object_name, vkSetDebugUtilsObjectNameEXT);
     }
 
     // Depth/Stencil image
@@ -525,7 +541,9 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     depth_stencil_image_info.flags = 0;
     depth_stencil_image_info.imageType = VK_IMAGE_TYPE_2D;
     depth_stencil_image_info.format = depth_stencil_format;
-    depth_stencil_image_info.extent = { surface_caps.currentExtent.width, surface_caps.currentExtent.height, 1 };
+    depth_stencil_image_info.extent.width = surface_caps.currentExtent.width;
+    depth_stencil_image_info.extent.height = surface_caps.currentExtent.height;
+    depth_stencil_image_info.extent.depth = 1;
     depth_stencil_image_info.mipLevels = 1;
     depth_stencil_image_info.arrayLayers = 1;
     depth_stencil_image_info.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -583,9 +601,9 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     depth_stencil_image_view_info.subresourceRange.layerCount = 1;
     VkImageView depth_stencil_image_view = VK_NULL_HANDLE;
     VK_CHECK_RES(vkCreateImageView(device, &depth_stencil_image_view_info, NULL, &depth_stencil_image_view));
-    VulkanSetObjectName(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)depth_stencil_image, "Depth/Stencil Image", vkSetDebugUtilsObjectNameEXT);
-    VulkanSetObjectName(device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)depth_stencil_image_memory, "Depth/Stencil Image Memory", vkSetDebugUtilsObjectNameEXT);
-    VulkanSetObjectName(device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depth_stencil_image_view, "Depth/Stencil Image View", vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)depth_stencil_image, "Depth/Stencil Image", vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)depth_stencil_image_memory, "Depth/Stencil Image Memory", vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depth_stencil_image_view, "Depth/Stencil Image View", vkSetDebugUtilsObjectNameEXT);
 
     // Intermediate swapchain image
     VkFormat intermediate_swapchain_image_format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -596,7 +614,9 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     image_info.flags = 0;
     image_info.imageType = VK_IMAGE_TYPE_2D;
     image_info.format = intermediate_swapchain_image_format;
-    image_info.extent = { surface_caps.currentExtent.width, surface_caps.currentExtent.height, 1 };
+    image_info.extent.width = surface_caps.currentExtent.width;
+    image_info.extent.height = surface_caps.currentExtent.height;
+    image_info.extent.depth = 1;
     image_info.mipLevels = 1;
     image_info.arrayLayers = 1;
     image_info.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -654,9 +674,9 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     image_view_info.subresourceRange.layerCount = 1;
     VkImageView intermediate_swapchain_image_view = VK_NULL_HANDLE;
     VK_CHECK_RES(vkCreateImageView(device, &image_view_info, NULL, &intermediate_swapchain_image_view));
-    VulkanSetObjectName(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)intermediate_swapchain_image, "Intermediate Swapchain Image", vkSetDebugUtilsObjectNameEXT);
-    VulkanSetObjectName(device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)intermediate_swapchain_image_memory, "Intermediate Swapchain Image Memory", vkSetDebugUtilsObjectNameEXT);
-    VulkanSetObjectName(device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)intermediate_swapchain_image_view, "Intermediate Swapchain Image View", vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)intermediate_swapchain_image, "Intermediate Swapchain Image", vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)intermediate_swapchain_image_memory, "Intermediate Swapchain Image Memory", vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)intermediate_swapchain_image_view, "Intermediate Swapchain Image View", vkSetDebugUtilsObjectNameEXT);
 
     // Command pool
     VkCommandPoolCreateInfo command_pool_info;
@@ -681,7 +701,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
         memset(object_name, 0, 128);
         sprintf(object_name, "Command Buffer ");
         sprintf(object_name + 15, "%u", i);
-        VulkanSetObjectName(device, VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)command_buffers[i], object_name, vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)command_buffers[i], object_name, vkSetDebugUtilsObjectNameEXT);
     }
 
     // Synchronization objects
@@ -713,15 +733,15 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
         memset(object_name, 0, 128);
         sprintf(object_name, "Image Available Semaphore ");
         sprintf(object_name + 26, "%u", i);
-        VulkanSetObjectName(device, VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)semaphores_image_available[i], object_name, vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)semaphores_image_available[i], object_name, vkSetDebugUtilsObjectNameEXT);
         memset(object_name, 0, 128);
         sprintf(object_name, "Render Finished Semaphore ");
         sprintf(object_name + 26, "%u", i);
-        VulkanSetObjectName(device, VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)semaphores_render_finished[i], object_name, vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)semaphores_render_finished[i], object_name, vkSetDebugUtilsObjectNameEXT);
         memset(object_name, 0, 128);
         sprintf(object_name, "Frame in Flight Fence ");
         sprintf(object_name + 22, "%u", i);
-        VulkanSetObjectName(device, VK_OBJECT_TYPE_FENCE, (uint64_t)fences_frame_in_flight[i], object_name, vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_FENCE, (uint64_t)fences_frame_in_flight[i], object_name, vkSetDebugUtilsObjectNameEXT);
     }
 
     // Pipeline cache header
@@ -774,7 +794,7 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     pipeline_cache_info.pInitialData = (void*)pipeline_cache_data;
     VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
     VK_CHECK_RES(vkCreatePipelineCache(device, &pipeline_cache_info, NULL, &pipeline_cache));
-    VulkanSetObjectName(device, VK_OBJECT_TYPE_PIPELINE_CACHE, (uint64_t)pipeline_cache, "Pipeline Cache", vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(device, VK_OBJECT_TYPE_PIPELINE_CACHE, (uint64_t)pipeline_cache, "Pipeline Cache", vkSetDebugUtilsObjectNameEXT);
     if (pipeline_cache_file_data != NULL)
     {
         free(pipeline_cache_file_data);
@@ -893,22 +913,6 @@ void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulka
     vulkan->vkCmdEndDebugUtilsLabelEXT          = vkCmdEndDebugUtilsLabelEXT;
 }
 
-void VulkanSetObjectName(VkDevice device, VkObjectType object_type, uint64_t object, const char* name, PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT)
-{
-    VkDebugUtilsObjectNameInfoEXT name_info;
-    name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-    name_info.pNext = NULL;
-    name_info.objectType = object_type;
-    name_info.objectHandle = object;
-    name_info.pObjectName = name;
-    VK_CHECK_RES(vkSetDebugUtilsObjectNameEXT(device, &name_info));
-}
-
-void VulkanSetObjectName(vulkan_context_t* vulkan, VkObjectType object_type, uint64_t object, const char* name)
-{
-    VulkanSetObjectName(vulkan->device, object_type, object, name, vulkan->vkSetDebugUtilsObjectNameEXT);
-}
-
 void VulkanDestroySwapchain(vulkan_context_t* vulkan)
 {
     // Intermeditae swapchain image
@@ -994,7 +998,7 @@ void VulkanRecreateSwapchain(vulkan_context_t* vulkan)
         memset(object_name, 0, 128);
         sprintf(object_name, "Swapchain Image ");
         sprintf(object_name + 16, "%u", i);
-        VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_IMAGE, (uint64_t)swapchain_images[i], object_name, vulkan->vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_IMAGE, (uint64_t)swapchain_images[i], object_name, vulkan->vkSetDebugUtilsObjectNameEXT);
     }
 
     // Swapchain image views
@@ -1022,7 +1026,7 @@ void VulkanRecreateSwapchain(vulkan_context_t* vulkan)
         memset(object_name, 0, 128);
         sprintf(object_name, "Swapchain Image View ");
         sprintf(object_name + 21, "%u", i);
-        VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)swapchain_image_views[i], object_name, vulkan->vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)swapchain_image_views[i], object_name, vulkan->vkSetDebugUtilsObjectNameEXT);
     }
 
     // Depth/Stencil image
@@ -1034,7 +1038,9 @@ void VulkanRecreateSwapchain(vulkan_context_t* vulkan)
     depth_stencil_image_info.flags = 0;
     depth_stencil_image_info.imageType = VK_IMAGE_TYPE_2D;
     depth_stencil_image_info.format = depth_stencil_format;
-    depth_stencil_image_info.extent = { surface_caps.currentExtent.width, surface_caps.currentExtent.height, 1 };
+    depth_stencil_image_info.extent.width = surface_caps.currentExtent.width;
+    depth_stencil_image_info.extent.height = surface_caps.currentExtent.height;
+    depth_stencil_image_info.extent.depth = 1;
     depth_stencil_image_info.mipLevels = 1;
     depth_stencil_image_info.arrayLayers = 1;
     depth_stencil_image_info.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1092,9 +1098,9 @@ void VulkanRecreateSwapchain(vulkan_context_t* vulkan)
     depth_stencil_image_view_info.subresourceRange.layerCount = 1;
     VkImageView depth_stencil_image_view = VK_NULL_HANDLE;
     VK_CHECK_RES(vkCreateImageView(vulkan->device, &depth_stencil_image_view_info, NULL, &depth_stencil_image_view));
-    VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_IMAGE, (uint64_t)depth_stencil_image, "Depth/Stencil Image", vulkan->vkSetDebugUtilsObjectNameEXT);
-    VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)depth_stencil_image_memory, "Depth/Stencil Image Memory", vulkan->vkSetDebugUtilsObjectNameEXT);
-    VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depth_stencil_image_view, "Depth/Stencil Image View", vulkan->vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_IMAGE, (uint64_t)depth_stencil_image, "Depth/Stencil Image", vulkan->vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)depth_stencil_image_memory, "Depth/Stencil Image Memory", vulkan->vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depth_stencil_image_view, "Depth/Stencil Image View", vulkan->vkSetDebugUtilsObjectNameEXT);
 
     // Intermediate swapchain image
     VkFormat intermediate_swapchain_image_format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -1105,7 +1111,9 @@ void VulkanRecreateSwapchain(vulkan_context_t* vulkan)
     image_info.flags = 0;
     image_info.imageType = VK_IMAGE_TYPE_2D;
     image_info.format = intermediate_swapchain_image_format;
-    image_info.extent = { surface_caps.currentExtent.width, surface_caps.currentExtent.height, 1 };
+    image_info.extent.width = surface_caps.currentExtent.width;
+    image_info.extent.height = surface_caps.currentExtent.height;
+    image_info.extent.depth = 1;
     image_info.mipLevels = 1;
     image_info.arrayLayers = 1;
     image_info.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1163,9 +1171,9 @@ void VulkanRecreateSwapchain(vulkan_context_t* vulkan)
     image_view_info.subresourceRange.layerCount = 1;
     VkImageView intermediate_swapchain_image_view = VK_NULL_HANDLE;
     VK_CHECK_RES(vkCreateImageView(vulkan->device, &image_view_info, NULL, &intermediate_swapchain_image_view));
-    VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_IMAGE, (uint64_t)intermediate_swapchain_image, "Intermediate Swapchain Image", vulkan->vkSetDebugUtilsObjectNameEXT);
-    VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)intermediate_swapchain_image_memory, "Intermediate Swapchain Image Memory", vulkan->vkSetDebugUtilsObjectNameEXT);
-    VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)intermediate_swapchain_image_view, "Intermediate Swapchain Image View", vulkan->vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_IMAGE, (uint64_t)intermediate_swapchain_image, "Intermediate Swapchain Image", vulkan->vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)intermediate_swapchain_image_memory, "Intermediate Swapchain Image Memory", vulkan->vkSetDebugUtilsObjectNameEXT);
+    VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)intermediate_swapchain_image_view, "Intermediate Swapchain Image View", vulkan->vkSetDebugUtilsObjectNameEXT);
 
     // Transfer images to correct initial layout
     VkCommandBuffer command_buffer = vulkan->command_buffers[0];
@@ -1279,7 +1287,7 @@ void VulkanCreateShader(vulkan_context_t* vulkan, const char* file, VkShaderModu
     // Name
     if (shader_name != NULL)
     {
-        VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_SHADER_MODULE, (uint64_t)*shader, shader_name, vulkan->vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_SHADER_MODULE, (uint64_t)*shader, shader_name, vulkan->vkSetDebugUtilsObjectNameEXT);
     }
 }
 
@@ -1428,11 +1436,11 @@ void VulkanCreateBuffer(vulkan_context_t* vulkan, void* buffer_data, VkDeviceSiz
     // Name
     if (buffer_name != NULL)
     {
-        VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_BUFFER, (uint64_t)*buffer, buffer_name, vulkan->vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_BUFFER, (uint64_t)*buffer, buffer_name, vulkan->vkSetDebugUtilsObjectNameEXT);
     }
     if (buffer_memory_name != NULL)
     {
-        VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)*buffer_memory, buffer_memory_name, vulkan->vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)*buffer_memory, buffer_memory_name, vulkan->vkSetDebugUtilsObjectNameEXT);
     }
 }
 
@@ -1445,9 +1453,9 @@ void VulkanDestroyBuffer(vulkan_context_t* vulkan, VkBuffer* buffer, VkDeviceMem
     *buffer = VK_NULL_HANDLE;
 }
 
-void VulkanCreateImage(vulkan_context_t* vulkan, VkImageType image_type, VkFormat image_format, uint32_t image_width, uint32_t image_height, uint32_t image_depth, VkSampleCountFlagBits image_samples, VkImageTiling image_tiling, VkImageUsageFlags image_usage, VkImageViewType image_view_type, VkImageAspectFlags image_aspect, VkImageLayout image_final_layout, void* image_data, VkDeviceSize image_data_size, VkMemoryPropertyFlags image_memory_properties, VkImage* image, VkDeviceMemory *image_memory, VkImageView* image_view, const char* image_name, const char* image_memory_name, const char* image_view_name)
+void VulkanCreateImage(vulkan_context_t* vulkan, VkImageType image_type, VkFormat image_format, uint32_t image_width, uint32_t image_height, uint32_t image_depth, VkSampleCountFlagBits image_samples, VkImageTiling image_tiling, VkImageUsageFlags image_usage, VkImageViewType image_view_type, VkImageAspectFlags image_aspect, VkImageLayout image_final_layout, void* image_data, VkDeviceSize image_data_size, VkMemoryPropertyFlags image_memory_properties, VkImage* image, VkDeviceMemory* image_memory, VkImageView* image_view, const char* image_name, const char* image_memory_name, const char* image_view_name)
 {
-        assert(vulkan != NULL);
+    assert(vulkan != NULL);
     assert(*image == VK_NULL_HANDLE);
     assert(*image_memory == VK_NULL_HANDLE);
     assert(*image_view == VK_NULL_HANDLE);
@@ -1459,7 +1467,9 @@ void VulkanCreateImage(vulkan_context_t* vulkan, VkImageType image_type, VkForma
     image_info.flags = 0;
     image_info.imageType = image_type;
     image_info.format = image_format;
-    image_info.extent = { image_width, image_height, image_depth };
+    image_info.extent.width = image_width;
+    image_info.extent.height = image_height;
+    image_info.extent.depth = image_depth;
     image_info.mipLevels = 1;
     image_info.arrayLayers = 1;
     image_info.samples = image_samples;
@@ -1603,8 +1613,12 @@ void VulkanCreateImage(vulkan_context_t* vulkan, VkImageType image_type, VkForma
             buffer_image_copy_region.imageSubresource.mipLevel = 0;
             buffer_image_copy_region.imageSubresource.baseArrayLayer = 0;
             buffer_image_copy_region.imageSubresource.layerCount = 1;
-            buffer_image_copy_region.imageOffset = { 0, 0, 0 };
-            buffer_image_copy_region.imageExtent = { image_width, image_height, image_depth };
+            buffer_image_copy_region.imageOffset.x = 0;
+            buffer_image_copy_region.imageOffset.y = 0;
+            buffer_image_copy_region.imageOffset.z = 0;
+            buffer_image_copy_region.imageExtent.width = image_width;
+            buffer_image_copy_region.imageExtent.height = image_height;
+            buffer_image_copy_region.imageExtent.depth = image_depth;
             vkCmdCopyBufferToImage(command_buffer, buffer_staging, *image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_image_copy_region);
             vkEndCommandBuffer(command_buffer);
             VkSubmitInfo submit_info;
@@ -1661,15 +1675,15 @@ void VulkanCreateImage(vulkan_context_t* vulkan, VkImageType image_type, VkForma
     // Name
     if (image_name != NULL)
     {
-        VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_IMAGE, (uint64_t)*image, image_name, vulkan->vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_IMAGE, (uint64_t)*image, image_name, vulkan->vkSetDebugUtilsObjectNameEXT);
     }
     if (image_memory_name != NULL)
     {
-        VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)*image_memory, image_memory_name, vulkan->vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)*image_memory, image_memory_name, vulkan->vkSetDebugUtilsObjectNameEXT);
     }
     if (image_view_name != NULL)
     {
-        VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)*image_view, image_view_name, vulkan->vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)*image_view, image_view_name, vulkan->vkSetDebugUtilsObjectNameEXT);
     }
 }
 
@@ -1703,7 +1717,7 @@ void VulkanCreateSampler(vulkan_context_t* vulkan, VkFilter sampler_min_filter, 
     // Name
     if (sampler_name != NULL)
     {
-        VulkanSetObjectName(vulkan->device, VK_OBJECT_TYPE_SAMPLER, (uint64_t)*sampler, sampler_name, vulkan->vkSetDebugUtilsObjectNameEXT);
+        VulkanSetObjectNameInternal(vulkan->device, VK_OBJECT_TYPE_SAMPLER, (uint64_t)*sampler, sampler_name, vulkan->vkSetDebugUtilsObjectNameEXT);
     }
 }
 

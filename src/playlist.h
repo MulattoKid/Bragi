@@ -24,22 +24,21 @@
 
 #include <stdint.h>
 
-struct playlist_t
+typedef struct
 {
     char*    song_paths;
     song_t*  songs;
     song_t*  songs_shuffled;
     uint64_t song_count;
     uint64_t current_song_index;
-};
+} playlist_t;
 
-enum playlist_error_e
+typedef enum
 {
     PLAYLIST_ERROR_NO = 0, // No error
     PLAYLIST_ERROR_UNABLE_TO_OPEN_FILE = 1, // Unable to open the path supplied
     PLAYLIST_ERROR_EMPTY = 2 // Playlist file doesn't contain any supported audio files
-
-};
+} playlist_error_e;
 
 void             PlaylistInit(playlist_t* playlist);
 playlist_error_e PlaylistLoad(char* playlist_file_path, playlist_t* playlist);

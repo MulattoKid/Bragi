@@ -34,7 +34,7 @@
 // Band 0 is the DC-term (the 0Hz term, which is the average of all the other frequency bands in the sample window)
 #define DFT_FREQUENCY_BAND_COUNT 255 // DFT_BAND_COUNT - 1
 
-void DFTCompute(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequency_bands);
-void DFTCompute(byte* audio_data, int32_t sample_count, int16_t bits_per_sample, int16_t bytes_per_sample_all_channels, float* frequency_bands);
+void DFTComputeWAV(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequency_bands);
+void DFTComputeRAW(byte* audio_data, int32_t sample_count, int16_t bits_per_sample, int16_t bytes_per_sample_all_channels, float* frequency_bands);
 
 #endif

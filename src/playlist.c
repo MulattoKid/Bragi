@@ -24,7 +24,8 @@
 #include <stdio.h>
 #include <time.h>
 
-struct linked_list_t
+typedef struct linked_list_t linked_list_t;
+struct linked_list_t 
 {
     song_t* pointer;
     linked_list_t* previous;

@@ -712,14 +712,14 @@ void SceneUIUpdateInfoMessage(const char* message, uint32_t row)
     info_section_texts_row_string_lengths[row] = strlen(info_section_texts_rows[row]);
 }
 
-void SceneUIRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_buffer, uint32_t frame_image_index, uint32_t frame_resource_index, bool ui_showing, char* sound_player_command_string, uint16_t sound_player_command_string_length)
+void SceneUIRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_buffer, uint32_t frame_image_index, uint32_t frame_resource_index, uint8_t ui_showing, char* sound_player_command_string, uint16_t sound_player_command_string_length)
 {
     // UI render pass
     // No synchronization is neccessary between the scene's render pass(es) and the UI render pass, as the UI render pass
     // only writes to the intermediate swapchain image, which the scene's render pass(es) also do
     VulkanCmdBeginDebugUtilsLabel(vulkan, frame_command_buffer, "UI Render Pass");
     
-    if (ui_showing)
+    if (ui_showing == 1)
     {
         VkRenderingAttachmentInfo color_attachment;
         color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;

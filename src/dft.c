@@ -27,7 +27,7 @@
 #define MATH_TWO_PI 6.28318530718f
 
 // TODO (Daniel): optimize
-void DFTCompute(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequency_bands)
+void DFTComputeWAV(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequency_bands)
 {
     static float dft_real[DFT_N];
     static float dft_imaginary[DFT_N];
@@ -80,8 +80,8 @@ void DFTCompute(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequen
             }
 
             // Average in-place
-            dft_real[k] += fabs(real) / float(iteration_count);
-            dft_imaginary[k] += fabs(imaginary) / float(iteration_count);
+            dft_real[k] += fabs(real) / (float)iteration_count;
+            dft_imaginary[k] += fabs(imaginary) / (float)iteration_count;
         }
     }
 
@@ -91,7 +91,7 @@ void DFTCompute(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequen
     {
         float real = dft_real[i];
         float imaginary = dft_imaginary[i];
-        float magnitude = 2.0f * sqrtf((real * real) + (imaginary * imaginary)) / float(DFT_N);
+        float magnitude = 2.0f * sqrtf((real * real) + (imaginary * imaginary)) / (float)DFT_N;
 
         // In order to get more smooth drops in the magnitude, we don't jump straigt from the current
         // to the next one if it's lower than the current magnitude. Instead we scale down the current
@@ -117,7 +117,7 @@ void DFTCompute(wav_t* wav, DWORD sample_start, DWORD sample_end, float* frequen
     }
 }
 
-void DFTCompute(byte* audio_data, int32_t sample_count, int16_t bps, int16_t bytes_per_sample_all_channels, float* frequency_bands)
+void DFTComputeRAW(byte* audio_data, int32_t sample_count, int16_t bps, int16_t bytes_per_sample_all_channels, float* frequency_bands)
 {
     static float dft_real[DFT_N];
     static float dft_imaginary[DFT_N];
@@ -166,8 +166,8 @@ void DFTCompute(byte* audio_data, int32_t sample_count, int16_t bps, int16_t byt
             }
 
             // Average in-place
-            dft_real[k] += fabs(real) / float(iteration_count);
-            dft_imaginary[k] += fabs(imaginary) / float(iteration_count);
+            dft_real[k] += fabs(real) / (float)iteration_count;
+            dft_imaginary[k] += fabs(imaginary) / (float)iteration_count;
         }
     }
 
@@ -177,7 +177,7 @@ void DFTCompute(byte* audio_data, int32_t sample_count, int16_t bps, int16_t byt
     {
         float real = dft_real[i];
         float imaginary = dft_imaginary[i];
-        float magnitude = 2.0f * sqrtf((real * real) + (imaginary * imaginary)) / float(DFT_N);
+        float magnitude = 2.0f * sqrtf((real * real) + (imaginary * imaginary)) / (float)DFT_N;
 
         // In order to get more smooth drops in the magnitude, we don't jump straigt from the current
         // to the next one if it's lower than the current magnitude. Instead we scale down the current

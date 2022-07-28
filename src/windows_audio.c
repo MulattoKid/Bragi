@@ -24,7 +24,7 @@
 #include <stdio.h>
 
 // https://docs.microsoft.com/en-us/windows/win32/multimedia/determining-nonstandard-format-support
-bool AudioDeviceSupportsPlayback(uint32_t sample_rate, uint8_t bps, uint8_t channel_count)
+uint8_t AudioDeviceSupportsPlayback(uint32_t sample_rate, uint8_t bps, uint8_t channel_count)
 {
     WAVEFORMATEX format;
     format.wFormatTag = WAVE_FORMAT_PCM;
@@ -37,9 +37,9 @@ bool AudioDeviceSupportsPlayback(uint32_t sample_rate, uint8_t bps, uint8_t chan
     MMRESULT res = waveOutOpen(NULL, WAVE_MAPPER, &format, NULL, NULL, WAVE_FORMAT_QUERY);
     if (res != MMSYSERR_NOERROR)
     {
-        return false;
+        return 0;
     }
-    return true;
+    return 1;
 }
 
 void AudioOpen(LPHWAVEOUT device, LPCWAVEFORMATEX device_format, DWORD_PTR callback, DWORD_PTR shared_data)

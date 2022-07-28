@@ -18,6 +18,40 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\audio.c" />
+    <ClCompile Include="..\src\dft.c" />
+    <ClCompile Include="..\src\flac.c" />
+    <ClCompile Include="..\src\main.c" />
+    <ClCompile Include="..\src\playlist.c" />
+    <ClCompile Include="..\src\scene_columns.c" />
+    <ClCompile Include="..\src\scene_ui.c" />
+    <ClCompile Include="..\src\song.c" />
+    <ClCompile Include="..\src\sound_player.c" />
+    <ClCompile Include="..\src\vulkan_engine.c" />
+    <ClCompile Include="..\src\wav.c" />
+    <ClCompile Include="..\src\windows_audio.c" />
+    <ClCompile Include="..\src\windows_synchronization.c" />
+    <ClCompile Include="..\src\windows_thread.c" />
+    <ClCompile Include="..\src\windows_window.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\audio.h" />
+    <ClInclude Include="..\src\dft.h" />
+    <ClInclude Include="..\src\flac.h" />
+    <ClInclude Include="..\src\macros.h" />
+    <ClInclude Include="..\src\playlist.h" />
+    <ClInclude Include="..\src\scene_columns.h" />
+    <ClInclude Include="..\src\scene_ui.h" />
+    <ClInclude Include="..\src\song.h" />
+    <ClInclude Include="..\src\sound_player.h" />
+    <ClInclude Include="..\src\vulkan_engine.h" />
+    <ClInclude Include="..\src\wav.h" />
+    <ClInclude Include="..\src\windows_audio.h" />
+    <ClInclude Include="..\src\windows_synchronization.h" />
+    <ClInclude Include="..\src\windows_thread.h" />
+    <ClInclude Include="..\src\windows_window.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -155,40 +189,6 @@
       <AdditionalDependencies>Winmm.lib;vulkan\1.3.204\vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="..\src\audio.cpp" />
-    <ClCompile Include="..\src\dft.cpp" />
-    <ClCompile Include="..\src\flac.cpp" />
-    <ClCompile Include="..\src\main.cpp" />
-    <ClCompile Include="..\src\playlist.cpp" />
-    <ClCompile Include="..\src\scene_columns.cpp" />
-    <ClCompile Include="..\src\scene_ui.cpp" />
-    <ClCompile Include="..\src\song.cpp" />
-    <ClCompile Include="..\src\sound_player.cpp" />
-    <ClCompile Include="..\src\vulkan_engine.cpp" />
-    <ClCompile Include="..\src\wav.cpp" />
-    <ClCompile Include="..\src\windows_audio.cpp" />
-    <ClCompile Include="..\src\windows_synchronization.cpp" />
-    <ClCompile Include="..\src\windows_thread.cpp" />
-    <ClCompile Include="..\src\windows_window.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\src\audio.h" />
-    <ClInclude Include="..\src\dft.h" />
-    <ClInclude Include="..\src\flac.h" />
-    <ClInclude Include="..\src\macros.h" />
-    <ClInclude Include="..\src\playlist.h" />
-    <ClInclude Include="..\src\scene_columns.h" />
-    <ClInclude Include="..\src\scene_ui.h" />
-    <ClInclude Include="..\src\song.h" />
-    <ClInclude Include="..\src\sound_player.h" />
-    <ClInclude Include="..\src\vulkan_engine.h" />
-    <ClInclude Include="..\src\wav.h" />
-    <ClInclude Include="..\src\windows_audio.h" />
-    <ClInclude Include="..\src\windows_synchronization.h" />
-    <ClInclude Include="..\src\windows_thread.h" />
-    <ClInclude Include="..\src\windows_window.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

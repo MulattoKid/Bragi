@@ -352,7 +352,7 @@ uint64_t unpack_rice_to_int32(byte_t* bytes, uint8_t bit_current, uint8_t* bit_e
 // https://github.com/xiph/flac/blob/27c615706cedd252a206dd77e3910dfa395dcc49/include/FLAC/format.h
 // https://github.com/xiph/flac/blob/27c615706cedd252a206dd77e3910dfa395dcc49/src/libFLAC/metadata_iterators.c
 // https://github.com/xiph/flac/blob/27c615706cedd252a206dd77e3910dfa395dcc49/src/libFLAC/bitreader.c
-enum flac_metadata_block_type_e
+typedef enum
 {
     FLAC_METADATA_BLOCK_TYPE_STREAMINFO     = 0,
     FLAC_METADATA_BLOCK_TYPE_PADDING        = 1,
@@ -361,23 +361,23 @@ enum flac_metadata_block_type_e
     FLAC_METADATA_BLOCK_TYPE_VORBIS_COMMENT = 4,
     FLAC_METADATA_BLOCK_TYPE_CUESHEET       = 5,
     FLAC_METADATA_BLOCK_TYPE_PICTURE        = 6
-};
+} flac_metadata_block_type_e;
 
-enum flac_subframe_type_e
+typedef enum
 {
     FLAC_SUBFRAME_TYPE_CONSTANT = 0,
     FLAC_SUBFRAME_TYPE_VERBATIM = 1,
     FLAC_SUBFRAME_TYPE_FIXED    = 2,
     FLAC_SUBFRAME_TYPE_LPC      = 3
-};
+} flac_subframe_type_e;
 
-enum flac_residule_type_e
+typedef enum
 {
     FLAC_RESIDUAL_TYPE_RICE  = 0,
     FLAC_RESIDUAL_TYPE_RICE2 = 1
-};
+} flac_residule_type_e;
 
-enum flac_channel_assignment_e
+typedef enum
 {
     // 1 channel: mono
     FLAC_CHANNEL_ASSIGNMENT_MONO = 1,
@@ -401,16 +401,16 @@ enum flac_channel_assignment_e
     FLAC_CHANNEL_ASSIGNMENT_DIFF_RIGHT = 10,
     // 2 channels: middle (average), side difference (left minus right)
     FLAC_CHANNEL_ASSIGNMENT_MID_DIFF = 11,
-};
+} flac_channel_assignment_e;
 
-struct flac_metadata_block_header_t
+typedef struct
 {
     flac_metadata_block_type_e type;
     uint32_t size;
-    bool is_last;
-};
+    uint8_t is_last;
+} flac_metadata_block_header_t;
 
-struct flac_metadata_block_streaminfo_t
+typedef struct
 {
     uint32_t block_size_min;
     uint32_t block_size_max;
@@ -420,9 +420,9 @@ struct flac_metadata_block_streaminfo_t
     uint32_t channel_count;
     uint32_t bits_per_sample;
     uint64_t sample_count;
-};
+} flac_metadata_block_streaminfo_t;
 
-struct flac_frame_header_t
+typedef struct
 {
     uint32_t blocking_strategy;
     uint32_t block_size_inter_channel_sampels;
@@ -432,16 +432,16 @@ struct flac_frame_header_t
     uint64_t sample_number;
     uint32_t frame_number;
     uint32_t crc;
-};
+} flac_frame_header_t;
 
-struct flac_subframe_header_t
+typedef struct
 {
     flac_subframe_type_e type;
     uint32_t lpc_order; // Only for FLAC_SUBFRAME_TYPE_LPC
     uint32_t wasted_bits_per_sample;
     uint32_t sample_count;
     int32_t* samples;
-};
+} flac_subframe_header_t;
 
 static uint64_t FLACPLoadMetadataBlockHeader(byte_t* bytes, flac_metadata_block_header_t* metadata_block_header)
 {
@@ -1331,7 +1331,7 @@ uint64_t FLACLoadSubframeLPC(byte_t* bytes, uint32_t bits_per_sample, uint32_t l
     //printf("[%u,%u]\n", metadata_block_streaminfo.frame_size_min, metadata_block_streaminfo.frame_size_max);
 
     // Skip all following METADATA blocks
-    while (metadata_block_header.is_last == false)
+    while (metadata_block_header.is_last == 0)
     {
         flac_memory += FLACPLoadMetadataBlockHeader(flac_memory, &metadata_block_header);
         if (metadata_block_header.type == FLAC_METADATA_BLOCK_TYPE_VORBIS_COMMENT)

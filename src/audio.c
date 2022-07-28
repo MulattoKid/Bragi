@@ -25,7 +25,7 @@ uint32_t FindGreatestCommonDivisor(uint32_t a, uint32_t b)
 
 void LowPassFilterCreate(const uint32_t input_rate, const uint32_t upsampling_factor, const uint32_t filter_length, float* filter, const filter_type_t filter_type, window_type_t const window_type)
 {
-    const uint32_t max_filter_length = 256;
+    #define max_filter_length 256
     assert(filter_length <= max_filter_length);
 
     // Filter properties
@@ -49,7 +49,7 @@ void LowPassFilterCreate(const uint32_t input_rate, const uint32_t upsampling_fa
             case WINDOW_TYPE_HAMMING:
             {
                 // https://en.wikipedia.org/wiki/Window_function#Hann_and_Hamming_windows
-                window[i] = HAMMING - ((1.0 - HAMMING) * cosf((2.0 * PI * float(i)) / float(filter_length - 1)));
+                window[i] = HAMMING - ((1.0 - HAMMING) * cosf((2.0 * PI * (float)i) / (float)(filter_length - 1)));
             } break;
 
             default:
@@ -64,7 +64,7 @@ void LowPassFilterCreate(const uint32_t input_rate, const uint32_t upsampling_fa
     for (int32_t i = 0; i < filter_length; i++)
     {
         int32_t sample_index = i - filter_shift;
-        float sample_time = float(sample_index) * filter_sample_delta;
+        float sample_time = (float)sample_index * filter_sample_delta;
 
         switch (filter_type)
         {

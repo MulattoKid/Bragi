@@ -48,7 +48,7 @@ song_error_e WAVLoadHeader(song_t* song)
     fread((void*)(&wav_header_packed), sizeof(wav_header_packed_t), 1, wav_file);
 
     // Find 'data' chunk in WAV file
-    bool found_data_subchunk = 0;
+    uint8_t found_data_subchunk = 0;
     uint32_t data_subchunk_size = 0;
     int32_t index = sizeof(wav_header_packed_t);
     char subchunk_id[4];
@@ -93,7 +93,7 @@ song_error_e WAVLoadHeader(song_t* song)
     if ((strncmp(wav_header_packed.chunk_id, "RIFF", 4) != 0) ||
         (strncmp(wav_header_packed.chunk_format, "WAVE", 4) != 0) ||
         (strncmp(wav_header_packed.subchunk1_id, "fmt ", 4) != 0) ||
-        (found_data_subchunk == false))
+        (found_data_subchunk == 0))
     {
         fclose(wav_file);
         return SONG_ERROR_INVALID_FILE;

@@ -35,26 +35,30 @@
 
 #include <assert.h>
 #include <locale.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // Global variables
-extern bool window_running;
-extern bool window_active;
+extern uint8_t window_running;
+extern uint8_t window_active;
 extern window_key_event window_key_events[UINT8_MAX];
 extern uint8_t window_key_releases_index;
 
+#include <mmdeviceapi.h>
 int main(int argc, char** argv)
 {
+    /*IMMDeviceCollection* devices = NULL;
+    HRESULT hres_tmp = EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devices);
+    exit(EXIT_SUCCESS);*/
+
     // Name main thread
     wchar_t thread_main_name[] = L"bragi_main_thread";
     HRESULT hres = SetThreadDescription(GetCurrentThread(), thread_main_name);
     if (FAILED(hres))
     {
-        printf("ERROR(%s:%i): Failed to name thread '%s'\n", __FILE__, __LINE__, thread_main_name);
+        printf("ERROR(%s:%i): Failed to name thread '%ls'\n", __FILE__, __LINE__, thread_main_name);
         exit(EXIT_FAILURE);
     }
 
@@ -68,7 +72,7 @@ int main(int argc, char** argv)
     HMODULE instance = NULL;
     HWND window = NULL;
     WindowCreate(&instance, &window);
-    bool window_key_shift_held = false;
+    uint8_t window_key_shift_held = 0;
 
 
 
@@ -87,8 +91,8 @@ int main(int argc, char** argv)
     //////////////
     // Settings //
     //////////////
-    bool ui_command_line_showing = false;
-    bool viz_enabled = false;
+    uint8_t ui_command_line_showing = 0;
+    uint8_t viz_enabled = 0;
 
 
 
@@ -132,8 +136,8 @@ int main(int argc, char** argv)
     sound_player_operation_e sound_player_ui_next_operation = SOUND_PLAYER_OP_READY;
     sound_player_loop_e sound_player_loop_state = SOUND_PLAYER_LOOP_NO;
     sound_player_shuffle_e sound_player_shuffle_state = SOUND_PLAYER_SHUFFLE_NO;
-    bool sound_player_loop_state_changed = false;
-    bool sound_player_shuffle_state_changed = false;
+    uint8_t sound_player_loop_state_changed = 0;
+    uint8_t sound_player_shuffle_state_changed = 0;
     char sound_player_playlist_next_file_path[MAX_PATH];
     char sound_player_playlist_current_file_path[MAX_PATH];
     char sound_player_song_playing[MAX_PATH];
@@ -181,8 +185,8 @@ int main(int argc, char** argv)
     sound_player_shared_data.ui_next_operation = SOUND_PLAYER_OP_READY;
     sound_player_shared_data.loop_state = SOUND_PLAYER_LOOP_NO;
     sound_player_shared_data.shuffle_state = SOUND_PLAYER_SHUFFLE_NO;
-    sound_player_shared_data.playlist_current_changed = false;
-    sound_player_shared_data.error_message_changed = false;
+    sound_player_shared_data.playlist_current_changed = 0;
+    sound_player_shared_data.error_message_changed = 0;
     memset(sound_player_shared_data.playlist_next_file_path, 0, MAX_PATH);
     memset(sound_player_shared_data.playlist_current_file_path, 0, MAX_PATH);
     memset(sound_player_shared_data.error_message, 0, MAX_PATH);
@@ -208,8 +212,8 @@ int main(int argc, char** argv)
         sound_player_ui_next_operation = SOUND_PLAYER_OP_READY;
         sound_player_loop_state = SOUND_PLAYER_LOOP_NO;
         sound_player_shuffle_state = SOUND_PLAYER_SHUFFLE_NO;
-        sound_player_loop_state_changed = false;
-        sound_player_shuffle_state_changed = false;
+        sound_player_loop_state_changed = 0;
+        sound_player_shuffle_state_changed = 0;
         audio_data_size = 0;
         audio_data_bps = 0;
         audio_data_bytes_per_sample_all_channels = 0;
@@ -224,7 +228,7 @@ int main(int argc, char** argv)
         {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
-            if (window_running == false)
+            if (window_running == 0)
             {
                 // Write out pipeline cache before exiting
                 size_t pipeline_cache_data_size;
@@ -262,13 +266,13 @@ int main(int argc, char** argv)
 
                 case VK_RETURN:
                 {
-                    if (window_key_shift_held == true)
+                    if (window_key_shift_held == 1)
                     {
                         ui_command_line_showing = !ui_command_line_showing;
                     }
                     else
                     {
-                        if (ui_command_line_showing == true)
+                        if (ui_command_line_showing == 1)
                         {
                             // Clear current error message
                             SceneUIUpdateInfoMessage("", INFO_SECTION_ROW_ERROR);
@@ -348,28 +352,28 @@ int main(int argc, char** argv)
                             else if (strcmp(command, "loop_no") == 0)
                             {
                                 sound_player_loop_state = SOUND_PLAYER_LOOP_NO;
-                                sound_player_loop_state_changed = true;
+                                sound_player_loop_state_changed = 1;
                             }
                             else if (strcmp(command, "loop") == 0)
                             {
                                 sound_player_loop_state = SOUND_PLAYER_LOOP_PLAYLIST;
-                                sound_player_loop_state_changed = true;
+                                sound_player_loop_state_changed = 1;
                             }
                             else if (strcmp(command, "loop_single") == 0)
                             {
                                 sound_player_loop_state = SOUND_PLAYER_LOOP_SINGLE;
-                                sound_player_loop_state_changed = true;
+                                sound_player_loop_state_changed = 1;
                             }
                             else if (strcmp(command, "shuffle_no") == 0)
                             {
                                 sound_player_shuffle_state = SOUND_PLAYER_SHUFFLE_NO;
-                                sound_player_shuffle_state_changed = true;
+                                sound_player_shuffle_state_changed = 1;
                             }
                             else if (strcmp(command, "shuffle") == 0)
                             {
                                 sound_player_ui_next_operation = SOUND_PLAYER_OP_SHUFFLE;
                                 sound_player_shuffle_state = SOUND_PLAYER_SHUFFLE_RANDOM;
-                                sound_player_shuffle_state_changed = true;
+                                sound_player_shuffle_state_changed = 1;
                             }
                             else if (strcmp(command, "taskbar_show") == 0)
                             {
@@ -391,11 +395,11 @@ int main(int argc, char** argv)
                             }
                             else if (strcmp(command, "viz_enable") == 0)
                             {
-                                viz_enabled = true;
+                                viz_enabled = 1;
                             }
                             else if (strcmp(command, "viz_disable") == 0)
                             {
-                                viz_enabled = false;
+                                viz_enabled = 0;
                             }
                             else if (strcmp(command, "generate_playlist") == 0)
                             {
@@ -485,17 +489,17 @@ reset_sound_player_command:
                 {
                     if (action == WINDOW_KEY_ACTION_PRESSED)
                     {
-                        window_key_shift_held = true;
+                        window_key_shift_held = 1;
                     }
                     else
                     {
-                        window_key_shift_held = false;
+                        window_key_shift_held = 0;
                     }
                 } break;
 
                 default:
                 {
-                    if (ui_command_line_showing == true)
+                    if (ui_command_line_showing == 1)
                     {
                         // Within ASCII character range [SPACE, ~]
                         if ((sound_player_command_string_index < (MAX_PATH - 2)) &&
@@ -518,7 +522,7 @@ reset_sound_player_command:
         }
         window_key_releases_index = 0;
         // If the window isn't active, sleep 10ms and try again
-        if (window_active == false)
+        if (window_active == 0)
         {
             Sleep(10);
             continue;
@@ -540,10 +544,10 @@ reset_sound_player_command:
         // This is also the only place where the mutex will be locked.
         SyncLockMutex(sound_player_shared_data.mutex, INFINITE, __FILE__, __LINE__);
         // Update current playlist
-        if (sound_player_shared_data.playlist_current_changed == true)
+        if (sound_player_shared_data.playlist_current_changed == 1)
         {
             strcpy(sound_player_playlist_current_file_path, sound_player_shared_data.playlist_current_file_path);
-            sound_player_shared_data.playlist_current_changed = false;
+            sound_player_shared_data.playlist_current_changed = 0;
         }
         if (sound_player_shared_data.song != NULL)
         {
@@ -556,18 +560,18 @@ reset_sound_player_command:
         }
 
         // Store string for error message if changed from sound player
-        if (sound_player_shared_data.error_message_changed == true)
+        if (sound_player_shared_data.error_message_changed == 1)
         {
             SceneUIUpdateInfoMessage(sound_player_shared_data.error_message, INFO_SECTION_ROW_ERROR);
-            sound_player_shared_data.error_message_changed = false;
+            sound_player_shared_data.error_message_changed = 0;
         }
         // Update loop-state in sound player
-        if (sound_player_loop_state_changed == true)
+        if (sound_player_loop_state_changed == 1)
         {
             sound_player_shared_data.loop_state = sound_player_loop_state;
         }
         // Update shuffle state in sound player
-        if (sound_player_shuffle_state_changed == true)
+        if (sound_player_shuffle_state_changed == 1)
         {
             sound_player_shared_data.shuffle_state = sound_player_shuffle_state;
         }
@@ -589,7 +593,7 @@ reset_sound_player_command:
         SyncReleaseMutex(sound_player_shared_data.mutex, __FILE__, __LINE__);
 
         // Get and store samples to be used for DFT from sound player
-        if ((viz_enabled == true) &&
+        if ((viz_enabled == 1) &&
             (sound_player_shared_data.audio_device != NULL))
         {
             DWORD mutex_locked = SyncTryLockMutex(dft_current_playback_buffer_shared_shared_mutex, 0, __FILE__, __LINE__);
@@ -602,17 +606,17 @@ reset_sound_player_command:
             }
         }
         // Potentially compute DFT
-        if ((viz_enabled == true) &&
+        if ((viz_enabled == 1) &&
             (dft_current_playback_buffer_local_size > 0))
         {
             float* dft_bands = NULL;
             VK_CHECK_RES(vkMapMemory(vulkan.device, dft_storage_buffer_memories[frame_resource_index], 0, VK_WHOLE_SIZE, 0, (void**)&dft_bands));
-            DFTCompute(dft_current_playback_buffer_local, dft_current_playback_buffer_local_size / sound_player_shared_data.song->bps / sound_player_shared_data.song->channel_count, sound_player_shared_data.song->bps, sound_player_shared_data.song->channel_count * sound_player_shared_data.song->bps, dft_bands);
+            DFTComputeRAW(dft_current_playback_buffer_local, (int32_t)(dft_current_playback_buffer_local_size / sound_player_shared_data.song->bps / sound_player_shared_data.song->channel_count), sound_player_shared_data.song->bps, sound_player_shared_data.song->channel_count * sound_player_shared_data.song->bps, dft_bands);
             vkUnmapMemory(vulkan.device, dft_storage_buffer_memories[frame_resource_index]);
         }
 
         // Update UI strings
-        if (sound_player_loop_state_changed == true)
+        if (sound_player_loop_state_changed == 1)
         {
             switch (sound_player_loop_state)
             {
@@ -632,7 +636,7 @@ reset_sound_player_command:
                 } break;
             }
         }
-        if (sound_player_shuffle_state_changed == true)
+        if (sound_player_shuffle_state_changed == 1)
         {
             switch (sound_player_shuffle_state)
             {
@@ -701,7 +705,7 @@ reset_sound_player_command:
         //  7) The function is responsible for ensuring all other synchronization
         //    a) Any other barriers regarding the intermediate swapchain or depth/stencil image
         //    b) Using the correct resources for the current frame (framebuffer corresponding to frame_image_index, and resources corresponding to frame_resource_index)
-        if (viz_enabled == true)
+        if (viz_enabled == 1)
         {
             SceneColumnsRender(&vulkan, frame_command_buffer, frame_image_index, frame_resource_index);
         }
@@ -730,14 +734,22 @@ reset_sound_player_command:
         blit_region.srcSubresource.mipLevel = 0;
         blit_region.srcSubresource.baseArrayLayer = 0;
         blit_region.srcSubresource.layerCount = 1;
-        blit_region.srcOffsets[0] = { 0, 0, 0};
-        blit_region.srcOffsets[1] = { (int32_t)vulkan.surface_caps.currentExtent.width, (int32_t)vulkan.surface_caps.currentExtent.height, 1 };
+        blit_region.srcOffsets[0].x = 0;
+        blit_region.srcOffsets[0].y = 0; 
+        blit_region.srcOffsets[0].z = 0;
+        blit_region.srcOffsets[1].x = (int32_t)vulkan.surface_caps.currentExtent.width;
+        blit_region.srcOffsets[1].y = (int32_t)vulkan.surface_caps.currentExtent.height;
+        blit_region.srcOffsets[1].z = 1;
         blit_region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit_region.dstSubresource.mipLevel = 0;
         blit_region.dstSubresource.baseArrayLayer = 0;
         blit_region.dstSubresource.layerCount = 1;
-        blit_region.dstOffsets[0] = { 0, 0, 0};
-        blit_region.dstOffsets[1] = { (int32_t)vulkan.surface_caps.currentExtent.width, (int32_t)vulkan.surface_caps.currentExtent.height, 1 };
+        blit_region.dstOffsets[0].x = 0;
+        blit_region.dstOffsets[0].y = 0;
+        blit_region.dstOffsets[0].z = 0;
+        blit_region.dstOffsets[1].x = (int32_t)vulkan.surface_caps.currentExtent.width;
+        blit_region.dstOffsets[1].y = (int32_t)vulkan.surface_caps.currentExtent.height;
+        blit_region.dstOffsets[1].z = 1;
         vkCmdBlitImage(frame_command_buffer, vulkan.intermediate_swapchain_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vulkan.swapchain_images[frame_image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit_region, VK_FILTER_NEAREST);
 
         // Barrier

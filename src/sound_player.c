@@ -16,15 +16,6 @@
  * OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-/**
- * //////////////////////////
- * Sound Player Specification
- * //////////////////////////
- * 
- * 
- * 
-*/
-
 #include "audio.h"
 #include "flac.h"
 #include "playlist.h"
@@ -39,8 +30,8 @@
 #include <stdio.h>
 
 static HANDLE audio_event = NULL;
-static const uint8_t audio_buffer_count = 3;
-static const uint64_t audio_buffer_size = 8192;
+#define audio_buffer_count 3
+#define audio_buffer_size 8192
 static WAVEHDR audio_headers[audio_buffer_count];
 static byte_t audio_buffers[audio_buffer_count][audio_buffer_size];
 static uint32_t audio_buffer_data_available_size[audio_buffer_count];
@@ -134,8 +125,8 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
         SyncLockMutex(shared_data->mutex, INFINITE, __FILE__, __LINE__);
 
         // Track whether later handling should be overruled
-        bool sound_player_operation_overruled = false;
-        bool callback_count_overruled = false;
+        uint8_t sound_player_operation_overruled = 0;
+        uint8_t callback_count_overruled = 0;
 
         sound_player_operation_e ui_next_operation = shared_data->ui_next_operation;
         // Check if we're to handle a command from the UI thread
@@ -149,8 +140,8 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
             song_t* song_next = NULL;
             playlist_error_e playlist_error = PLAYLIST_ERROR_NO;
             song_error_e song_error = SONG_ERROR_NO;
-            bool operation_success = false;
-            bool load_initial_chunks = false;
+            uint8_t operation_success = 0;
+            uint8_t load_initial_chunks = 0;
 
             // Handle next operation
             switch (ui_next_operation)
@@ -174,13 +165,13 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                         case PLAYLIST_ERROR_UNABLE_TO_OPEN_FILE:
                         {
                             sprintf(shared_data->error_message, "Unable to open playlist: %s", shared_data->playlist_next_file_path);
-                            shared_data->error_message_changed = true;
+                            shared_data->error_message_changed = 1;
                         } break;
 
                         case PLAYLIST_ERROR_EMPTY:
                         {
                             sprintf(shared_data->error_message, "Playlist file is empty: %s", shared_data->playlist_next_file_path);
-                            shared_data->error_message_changed = true;
+                            shared_data->error_message_changed = 1;
                         } break;
 
                         default:
@@ -217,6 +208,7 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
 
                         case SONG_TYPE_FLAC:
                         {
+                            assert(0);
                             //song_error = FLACLoad(song_next);
                         } break;
 
@@ -233,13 +225,13 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                         case SONG_ERROR_UNABLE_TO_OPEN_FILE:
                         {
                             sprintf(shared_data->error_message, "Unable to open audio file: %s", song_next->song_path_offset);
-                            shared_data->error_message_changed = true;
+                            shared_data->error_message_changed = 1;
                         } break;
 
                         case SONG_ERROR_INVALID_FILE:
                         {
                             sprintf(shared_data->error_message, "Not a proper audio file: %s", song_next->song_path_offset);
-                            shared_data->error_message_changed = true;
+                            shared_data->error_message_changed = 1;
                         } break;
 
                         default:
@@ -258,10 +250,10 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                     }
 
                     // 3) Pick audio device WAVE_MAPPER, and check that it can play the next WAV file's format
-                    if (AudioDeviceSupportsPlayback(song_next->sample_rate, song_next->bps, song_next->channel_count) == false)
+                    if (AudioDeviceSupportsPlayback(song_next->sample_rate, song_next->bps, song_next->channel_count) == 0)
                     {
                         sprintf(shared_data->error_message, "Unsupported audio format:\n\tSample rate: %i\n\tBits per sample: %i", song_next->sample_rate, song_next->bps * 8);
-                        shared_data->error_message_changed = true;
+                        shared_data->error_message_changed = 1;
 
                         // Loading of sound file was complete, but playback isn't supported.
                         // 'song_next''s audio data must be freed.
@@ -289,10 +281,10 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                     AudioOpen(windows_audio_device, &windows_audio_device_format, (DWORD_PTR)&waveOutProc, (DWORD_PTR)&callback_data);
 
                     // Reaching this point means there were no errors
-                    operation_success = true;
-                    load_initial_chunks = true;
-                    sound_player_operation_overruled = true;
-                    callback_count_overruled = true;
+                    operation_success = 1;
+                    load_initial_chunks = 1;
+                    sound_player_operation_overruled = 1;
+                    callback_count_overruled = 1;
                     SyncResetEvent(shared_data->event, __FILE__, __LINE__);
 
                     // Update current song
@@ -308,7 +300,7 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                     }
                     playlist_current = playlist_next;
                     strcpy(shared_data->playlist_current_file_path, shared_data->playlist_next_file_path);
-                    shared_data->playlist_current_changed = true;
+                    shared_data->playlist_current_changed = 1;
                     PlaylistInit(&playlist_next);
                 } break;
 
@@ -328,7 +320,7 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                         if (shared_data->loop_state == SOUND_PLAYER_LOOP_NO)
                         {
                             strcpy(shared_data->error_message, "End of playlist reached");
-                            shared_data->error_message_changed = true;
+                            shared_data->error_message_changed = 1;
                             playlist_current.current_song_index--;
                             break;
                         }
@@ -376,13 +368,13 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                         case SONG_ERROR_UNABLE_TO_OPEN_FILE:
                         {
                             sprintf(shared_data->error_message, "Unable to open audio file: %s", song_next->song_path_offset);
-                            shared_data->error_message_changed = true;
+                            shared_data->error_message_changed = 1;
                         } break;
 
                         case SONG_ERROR_INVALID_FILE:
                         {
                             sprintf(shared_data->error_message, "Not a proper audio file: %s", song_next->song_path_offset);
-                            shared_data->error_message_changed = true;
+                            shared_data->error_message_changed = 1;
                         } break;
 
                         default:
@@ -399,10 +391,10 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                     }
 
                     // 4) Pick audio device WAVE_MAPPER, and check that it can play the next WAV file's format
-                    if (AudioDeviceSupportsPlayback(song_next->sample_rate, song_next->bps, song_next->channel_count) == false)
+                    if (AudioDeviceSupportsPlayback(song_next->sample_rate, song_next->bps, song_next->channel_count) == 0)
                     {
                         sprintf(shared_data->error_message, "Unsupported audio format:\n\tSample rate: %i\n\tBits per sample: %i", song_next->sample_rate, song_next->bps * 8);
-                        shared_data->error_message_changed = true;
+                        shared_data->error_message_changed = 1;
 
                         // Loading of WAV file was complete, but playback isn't supported.
                         // 'song_next''s audio data must be freed.
@@ -423,10 +415,10 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                     AudioOpen(windows_audio_device, &windows_audio_device_format, (DWORD_PTR)&waveOutProc, (DWORD_PTR)&callback_data);
 
                     // Reaching this point means there were no errors
-                    operation_success = true;
-                    load_initial_chunks = true;
-                    sound_player_operation_overruled = true;
-                    callback_count_overruled = true;
+                    operation_success = 1;
+                    load_initial_chunks = 1;
+                    sound_player_operation_overruled = 1;
+                    callback_count_overruled = 1;
 
                     // Free current song's memory if one is loaded
                     assert(song_current->file != NULL);
@@ -446,8 +438,8 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                     AudioPause(*windows_audio_device);
 
                     // Reaching this point means there were no errors
-                    operation_success = true;
-                    sound_player_operation_overruled = true;
+                    operation_success = 1;
+                    sound_player_operation_overruled = 1;
                 } break;
 
                 case SOUND_PLAYER_OP_RESUME:
@@ -455,8 +447,8 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                     AudioResume(*windows_audio_device);
 
                     // Reaching this point means there were no errors
-                    operation_success = true;
-                    sound_player_operation_overruled = true;
+                    operation_success = 1;
+                    sound_player_operation_overruled = 1;
                 } break;
 
                 case SOUND_PLAYER_OP_SHUFFLE:
@@ -467,7 +459,7 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
                         PlaylistShuffle(&playlist_current);
 
                         // Reaching this point means there were no errors
-                        operation_success = true;
+                        operation_success = 1;
                     }
                 } break;
 
@@ -478,10 +470,10 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
             }
 
             // If the operation was handled successfully, it means the previous error can be cleared
-            if (operation_success == true)
+            if (operation_success == 1)
             {
                 shared_data->error_message[0] = '\0';
-                shared_data->error_message_changed = true;
+                shared_data->error_message_changed = 1;
             }
 
             // If the operation was handled successfully and the operation was either PLAY, NEXT or PREVIOUS
@@ -489,7 +481,7 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
             //  1) reset the callback counter, so that we only start loading in new chunks when the initial chunks of the new songs start to finish playback
             //  2) reset the event, so that if the callback has signaled the event while we were handling the operation, we ignore that signal as we're loading
             //     in new initial chunks, and reset the callback counter
-            if ((operation_success == true) &&
+            if ((operation_success == 1) &&
                 ((ui_next_operation == SOUND_PLAYER_OP_PLAY) || (ui_next_operation == SOUND_PLAYER_OP_NEXT) || (ui_next_operation == SOUND_PLAYER_OP_PREVIOUS)))
             {
                 InterlockedExchange((volatile LONG*)&callback_data.callback_count_atomic, 0);
@@ -497,7 +489,7 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
             }
 
             // If this is set we've loaded a new song (either through PLAY, NEXT or PREVIOUS), and we need to load its initial chunks
-            if (load_initial_chunks == true)
+            if (load_initial_chunks == 1)
             {
                 // Compute info about current song for sample-rate conversion
                 input_rate = shared_data->song->sample_rate;
@@ -611,7 +603,7 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
         }
 
         // Check if we're to handle a command from the sound player
-        if (sound_player_operation_overruled == true)
+        if (sound_player_operation_overruled == 1)
         {
             sound_player_next_operation = SOUND_PLAYER_OP_READY;
         }
@@ -623,7 +615,7 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
 
                 shared_data->ui_next_operation = sound_player_next_operation;
                 sound_player_next_operation = SOUND_PLAYER_OP_READY;
-                callback_count_overruled = true;
+                callback_count_overruled = 1;
                 SyncSetEvent(shared_data->event, __FILE__, __LINE__);
             }
         }
@@ -633,7 +625,7 @@ DWORD WINAPI SoundPlayerThreadProc(_In_ LPVOID lpParameter)
 
         // Check if we're to handle the callback having been invoked
         int32_t callback_count = callback_data.callback_count_atomic;
-        if ((callback_count_overruled == false) &&
+        if ((callback_count_overruled == 0) &&
             (callback_count > 0))
         {
             // Load next chunk of audio file

@@ -22,8 +22,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
-bool window_running = false;
-bool window_active = false;
+uint8_t window_running = 0;
+uint8_t window_active = 0;
 window_key_event window_key_events[UINT8_MAX]; // Is reset every frame
 uint8_t window_key_releases_index; // Is reset every frame
 
@@ -54,7 +54,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             }
             printf("WIN32 INFO: client dimensions: %ix%i\n", client_rect.right - client_rect.left, client_rect.bottom - client_rect.top);
 
-            window_running = true;
+            window_running = 1;
         } break;
 
         // WIN32 window's size changed.
@@ -92,14 +92,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             {
                 case VK_ESCAPE:
                 {
-                    window_running = false;
+                    window_running = 0;
                 } break;
 
                 case VK_SHIFT:
                 {
                     // Check that we haven't encountered too many key downs this frame
                     assert(window_key_releases_index < 256);
-                    window_key_events[window_key_releases_index] = { wParam, WINDOW_KEY_ACTION_PRESSED };
+                    window_key_events[window_key_releases_index].key = wParam;
+                    window_key_events[window_key_releases_index].action = WINDOW_KEY_ACTION_PRESSED;
                     window_key_releases_index++;
                 } break;
 
@@ -114,7 +115,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             {
                 // Check that we haven't encountered too many key downs this frame
                 assert(window_key_releases_index < 256);
-                window_key_events[window_key_releases_index] = { wParam, WINDOW_KEY_ACTION_RELEASED };
+                window_key_events[window_key_releases_index].key = wParam;
+                window_key_events[window_key_releases_index].action = WINDOW_KEY_ACTION_RELEASED;
                 window_key_releases_index++;
             }
         } break;
@@ -123,7 +125,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             // Check that we haven't encountered too many key downs this frame
             assert(window_key_releases_index < 256);
-            window_key_events[window_key_releases_index] = { wParam, WINDOW_KEY_ACTION_CHAR };
+            window_key_events[window_key_releases_index].key = wParam;
+            window_key_events[window_key_releases_index].action = WINDOW_KEY_ACTION_CHAR;
             window_key_releases_index++;
         } break;
 
@@ -138,14 +141,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         // WIN32 window is closed (e.g. X button is pressed or ALT+F4).
         case WM_CLOSE:
         {
-            window_running = false;
+            window_running = 0;
         } break;
 
         // WIN32 window has been destroyed.
         case WM_DESTROY:
         {
             // TODO(Daniel): handle this as an error - recreate window?
-            window_running = false;
+            window_running = 0;
         } break;
 
         default:

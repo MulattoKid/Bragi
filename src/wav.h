@@ -29,7 +29,7 @@
 // https://www.daubnet.com/en/file-format-riff
 PACK
 (
-struct wav_header_packed_t
+typedef struct
 {
     char    chunk_id[4]; // Must equal 'RIFF'
     int32_t chunk_size;
@@ -43,20 +43,20 @@ struct wav_header_packed_t
     int32_t bytes_per_second; // sample_rate * channel_count * (bits_per_sample / 8)
     int16_t bytes_per_sample_all_channels; // channel_count * (bits_per_sample / 8)
     int16_t bits_per_sample; // Either 8 or 16
-}
+} wav_header_packed_t
 );
 
 PACK
 (
-struct wav_subchunk_header_packed_t
+typedef struct
 {
     char    subchunk2_id[4]; // Must equal 'data'
     int32_t subchunk2_size; // sample_count * channel_count * (bits_per_sample / 8) = total_sample_data_size
-}
+} wav_subchunk_header_packed_t
 );
 
 // TODO (Daniel): pack properly
-struct wav_t
+typedef struct
 {
     byte_t* base_pointer;
     byte_t* audio_data;
@@ -64,9 +64,8 @@ struct wav_t
     int32_t sample_rate;
     int16_t channel_count;
     uint8_t bps; // Bytes per sample
-};
+} wav_t;
 
-//song_error_e WAVLoad(song_t* song);
 song_error_e WAVLoadHeader(song_t* song);
 uint32_t     WAVLoadData(playback_data_t* audio_thread_data, uint64_t output_size, byte_t* output);
 

@@ -37,7 +37,7 @@
 void SceneUIInit(vulkan_context_t* vulkan);
 void SceneUIRecreateFramebuffers(vulkan_context_t* vulkan);
 void SceneUIUpdateInfoMessage(const char* message, uint32_t row);
-void SceneUIRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_buffer, uint32_t frame_image_index, uint32_t frame_resource_index, bool ui_showing, char* sound_player_command_string, uint16_t sound_player_command_string_length);
+void SceneUIRender(vulkan_context_t* vulkan, VkCommandBuffer frame_command_buffer, uint32_t frame_image_index, uint32_t frame_resource_index, uint8_t ui_showing, char* sound_player_command_string, uint16_t sound_player_command_string_length);
 void SceneUIDestroy(vulkan_context_t* vulkan);
 
 #endif

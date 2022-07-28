@@ -25,22 +25,22 @@
 #include <stdio.h>
 #include <windows.h>
 
-enum song_error_e
+typedef enum
 {
     SONG_ERROR_NO = 0,
     SONG_ERROR_UNABLE_TO_OPEN_FILE = 1,
     SONG_ERROR_INVALID_FILE = 2
-};
+} song_error_e;
 
-enum song_type_e
+typedef enum
 {
     SONG_TYPE_INVALID = 0,
     SONG_TYPE_WAV = 1,
     SONG_TYPE_FLAC = 2
-};
+} song_type_e;
 
 // TODO (Daniel): split so that each song in a playlist doesn't require this much memory (wasteful/thrashy)
-struct song_t
+typedef struct
 {
     char title[MAX_PATH];
     char artist[MAX_PATH];
@@ -54,7 +54,7 @@ struct song_t
     uint16_t sample_rate;
     uint8_t channel_count;
     uint8_t bps; // Bytes per sample
-};
+} song_t;
 
 void SongInit(song_t* song);
 void SongFreeAudioData(song_t* song);

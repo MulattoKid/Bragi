@@ -24,11 +24,11 @@
 
 #include <windows.h>
 
-bool AudioDeviceSupportsPlayback(uint32_t sample_rate, uint8_t bps, uint8_t channel_count);
-void AudioOpen(LPHWAVEOUT device, LPCWAVEFORMATEX device_format, DWORD_PTR callback, DWORD_PTR shared_data);
-void AudioPause(HWAVEOUT device);
-void AudioResume(HWAVEOUT device);
-void AudioGetPlaybackPosition(HWAVEOUT device, LPMMTIME playback_position);
-void AudioClose(HWAVEOUT device, LPWAVEHDR headers, uint8_t header_count);
+uint8_t AudioDeviceSupportsPlayback(uint32_t sample_rate, uint8_t bps, uint8_t channel_count);
+void    AudioOpen(LPHWAVEOUT device, LPCWAVEFORMATEX device_format, DWORD_PTR callback, DWORD_PTR shared_data);
+void    AudioPause(HWAVEOUT device);
+void    AudioResume(HWAVEOUT device);
+void    AudioGetPlaybackPosition(HWAVEOUT device, LPMMTIME playback_position);
+void    AudioClose(HWAVEOUT device, LPWAVEHDR headers, uint8_t header_count);
 
 #endif

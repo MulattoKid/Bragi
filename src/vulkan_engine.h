@@ -29,7 +29,7 @@
 #define VULKAN_MAX_FRAMES_IN_FLIGHT 2
 
 // TODO (Daniel): pack
-struct vulkan_context_t
+typedef struct
 {
     uint32_t target_api_version;
     uint32_t instance_api_version;
@@ -97,12 +97,11 @@ struct vulkan_context_t
 
     // For naming objects
     char vulkan_object_name[128];
-};
+} vulkan_context_t;
 
 // Base functions
-void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulkan_context);
-void VulkanSetObjectName(VkDevice device, VkObjectType object_type, uint64_t object, const char* name, PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT);
 void VulkanSetObjectName(vulkan_context_t* vulkan, VkObjectType object_type, uint64_t object, const char* name);
+void VulkanInit(HINSTANCE win_instance, HWND win_window, vulkan_context_t* vulkan_context);
 // Swapchain
 void VulkanDestroySwapchain(vulkan_context_t* vulkan);
 void VulkanRecreateSwapchain(vulkan_context_t* vulkan);

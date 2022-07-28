@@ -5,16 +5,16 @@
 
 #include <stdint.h>
 
-enum filter_type_t
+typedef enum
 {
     FILTER_TYPE_SINC = 0
-};
+} filter_type_t;
 
-enum window_type_t
+typedef enum
 {
     WINDOW_TYPE_RECTANGULAR = 0,
     WINDOW_TYPE_HAMMING     = 1
-};
+} window_type_t;
 
 uint32_t FindGreatestCommonDivisor(uint32_t a, uint32_t b);
 void     LowPassFilterCreate(const uint32_t input_rate, const uint32_t upsampling_factor, const uint32_t filter_length, float* filter, const filter_type_t filter_type, const window_type_t window_type);
